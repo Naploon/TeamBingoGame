@@ -373,7 +373,13 @@ export function AdminDashboard({
                       <Badge tone={challenge.type === "competitive" ? "warning" : "success"}>
                         {challenge.type}
                       </Badge>
-                      <Badge tone={challenge.status === "cancelled" ? "danger" : "accent"}>
+                      <Badge
+                        tone={
+                          challenge.status === "cancelled" || challenge.status === "failed"
+                            ? "danger"
+                            : "accent"
+                        }
+                      >
                         {challenge.winnerTeamId ? `Winner: ${getTeamName(challenge.winnerTeamId)}` : "No winner"}
                       </Badge>
                     </div>
@@ -411,6 +417,7 @@ export function AdminDashboard({
                   <div className="mt-4 grid gap-3">
                     <Select name="status" defaultValue={challenge.status}>
                       <option value="resolved">Resolved</option>
+                      <option value="failed">Failed</option>
                       <option value="cancelled">Cancelled</option>
                     </Select>
                     <Select

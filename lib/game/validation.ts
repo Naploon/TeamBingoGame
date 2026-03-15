@@ -56,7 +56,7 @@ export const createChallengeSchema = z.object({
 export const resolveChallengeSchema = z.object({
   winnerTeamId: z.string().uuid().optional(),
   note: z.string().trim().max(300).optional(),
-  status: z.enum(["resolved", "cancelled"]).optional(),
+  status: z.enum(["resolved", "failed", "cancelled"]).optional(),
 });
 
 export const rateTaskSchema = z.object({
@@ -66,7 +66,7 @@ export const rateTaskSchema = z.object({
 export const overrideChallengeSchema = z.object({
   winnerTeamId: z.string().uuid().nullable(),
   note: z.string().trim().max(300).optional(),
-  status: z.enum(["resolved", "cancelled"]).default("resolved"),
+  status: z.enum(["resolved", "failed", "cancelled"]).default("resolved"),
 });
 
 export const switchCaptainSchema = z.object({

@@ -139,6 +139,13 @@ function applyCooperativeCompletion(state: ComputedTeamTaskState) {
   state.lastLossOpponentTeamId = null;
 }
 
+function applyCooperativeFailure(state: ComputedTeamTaskState) {
+  state.lossCount += 1;
+  state.completionTier = tierFromWins(state.winCount);
+  state.completionSource = state.winCount > 0 ? "cooperative" : "none";
+  state.lastLossOpponentTeamId = null;
+}
+
 function taskStateKey(teamId: string, taskId: string) {
   return `${teamId}:${taskId}`;
 }
@@ -163,7 +170,7 @@ export function recomputeTeamTaskStates(input: {
   });
 
   const resolvedChallenges = input.challenges
-    .filter((challenge) => challenge.status === "resolved")
+    .filter((challenge) => challenge.status === "resolved" || challenge.status === "failed")
     .sort((left, right) => {
       const leftDate = new Date(left.resolvedAt ?? left.createdAt).getTime();
       const rightDate = new Date(right.resolvedAt ?? right.createdAt).getTime();
@@ -181,9 +188,15 @@ export function recomputeTeamTaskStates(input: {
       return;
     }
 
-    if (challenge.type === "cooperative") {
+    if (challenge.type === "cooperative" && challenge.status === "resolved") {
       applyCooperativeCompletion(challengerState);
       applyCooperativeCompletion(opponentState);
+      return;
+    }
+
+    if (challenge.type === "cooperative" && challenge.status === "failed") {
+      applyCooperativeFailure(challengerState);
+      applyCooperativeFailure(opponentState);
       return;
     }
 

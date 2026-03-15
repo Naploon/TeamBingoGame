@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 type PlayerState = Awaited<ReturnType<typeof getPlayerState>>;
 
-type PlayerView = "board" | "active" | "leaderboard" | "team";
+type PlayerView = "board" | "history" | "leaderboard" | "team";
 
 const STAR_PATH =
   "M12 1.75l3.14 6.35 7.01 1.02-5.08 4.95 1.2 6.98L12 17.74 5.73 21.05l1.2-6.98-5.08-4.95 7.01-1.02L12 1.75Z";
@@ -39,6 +39,50 @@ function formatTierLabel(tier: string) {
 
 function formatStars(value: number) {
   return Number.isInteger(value) ? `${value}` : value.toFixed(1);
+}
+
+function getPlayerViewLabel(view: PlayerView) {
+  switch (view) {
+    case "history":
+      return "History";
+    default:
+      return view;
+  }
+}
+
+function formatHistoryResultLabel(result: PlayerState["matchHistory"][number]["result"]) {
+  switch (result) {
+    case "win":
+      return "Won";
+    case "loss":
+      return "Lost";
+    case "completed":
+      return "Completed";
+    case "failed":
+      return "Failed";
+    case "cancelled":
+      return "Cancelled";
+    case "in_progress":
+      return "In progress";
+    default:
+      return "No result";
+  }
+}
+
+function historyResultTone(result: PlayerState["matchHistory"][number]["result"]) {
+  switch (result) {
+    case "win":
+    case "completed":
+      return "success" as const;
+    case "failed":
+    case "loss":
+    case "cancelled":
+      return "danger" as const;
+    case "in_progress":
+      return "accent" as const;
+    default:
+      return "default" as const;
+  }
 }
 
 function StarIcon({
@@ -194,7 +238,7 @@ export function PlayerApp({
   const activeChallenge = state.activeChallenge;
   const myTeamId = state.team?.id ?? null;
   const activeChallengeTaskId = activeChallenge?.taskId ?? null;
-  const teamOptions = state.teams.filter((team) => team.id !== myTeamId);
+  const teamOptions = state.teams.filter((team) => team.id !== myTeamId && Boolean(team.name));
   const teamNeedsName = Boolean(state.team && !state.team.name);
   const showInitialTeamSetup = state.event.status === "live" && Boolean(state.team) && teamNeedsName;
   const challengeLockActive = Boolean(activeChallenge);
@@ -220,7 +264,7 @@ export function PlayerApp({
 
   useEffect(() => {
     if (activeChallenge) {
-      setView("active");
+      setView("history");
       setSelectedTaskId(activeChallenge.taskId);
     }
   }, [activeChallenge?.id, activeChallenge?.taskId]);
@@ -293,7 +337,7 @@ export function PlayerApp({
 
   async function handleResolveChallenge(input?: {
     winnerTeamId?: string;
-    status?: "resolved" | "cancelled";
+    status?: "resolved" | "failed" | "cancelled";
   }) {
     if (!activeChallenge) {
       return;
@@ -317,7 +361,13 @@ export function PlayerApp({
       });
       await readResponse(response, "Could not submit the result.");
 
-      setMessage(input?.status === "cancelled" ? "Challenge cancelled." : "Result submitted.");
+      setMessage(
+        input?.status === "cancelled"
+          ? "Challenge cancelled."
+          : input?.status === "failed"
+            ? "Challenge marked as failed."
+            : "Result submitted.",
+      );
       setNote("");
       setRatingStars(0);
       await refreshNow();
@@ -444,25 +494,25 @@ export function PlayerApp({
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
             <Panel>
               <div className="mb-4 flex gap-2 rounded-full bg-ink/5 p-1">
-                {(["board", "active", "leaderboard", "team"] as PlayerView[]).map((tab) => (
+                {(["board", "history", "leaderboard", "team"] as PlayerView[]).map((tab) => (
                   <button
                     key={tab}
                     type="button"
                     className={cn(
                       "min-h-11 flex-1 rounded-full px-3 text-sm font-semibold capitalize transition",
                       view === tab ? "bg-ink text-white" : "text-ink/60",
-                      challengeLockActive && tab !== "active" ? "cursor-not-allowed opacity-50" : "",
+                      challengeLockActive && tab !== "history" ? "cursor-not-allowed opacity-50" : "",
                     )}
                     onClick={() => {
-                      if (challengeLockActive && tab !== "active") {
+                      if (challengeLockActive && tab !== "history") {
                         return;
                       }
 
                       setView(tab);
                     }}
-                    disabled={challengeLockActive && tab !== "active"}
+                    disabled={challengeLockActive && tab !== "history"}
                   >
-                    {tab}
+                    {getPlayerViewLabel(tab)}
                   </button>
                 ))}
               </div>
@@ -500,7 +550,7 @@ export function PlayerApp({
                 </div>
               ) : null}
 
-              {view === "active" ? (
+              {view === "history" ? (
                 <div className="space-y-4">
                   {activeChallenge ? (
                     <div className="rounded-3xl border border-sea/20 bg-sea/8 p-5">
@@ -519,12 +569,91 @@ export function PlayerApp({
                             ? "The result is in. Rate the task now to continue."
                             : "Waiting for the other team to finish rating this task."}
                       </p>
+                      <Button className="mt-4" tone="ghost" onClick={() => setSelectedTaskId(activeChallenge.taskId)}>
+                        Open task
+                      </Button>
                     </div>
-                  ) : (
-                    <p className="rounded-3xl bg-ink/5 p-5 text-sm text-ink/65">
-                      No active challenge right now.
-                    </p>
-                  )}
+                  ) : null}
+
+                  <div className="rounded-3xl bg-ink/5 p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.24em] text-ink/45">Match history</p>
+                        <h3 className="mt-2 text-xl font-semibold text-ink">Tasks your team has played</h3>
+                        <p className="mt-2 text-sm text-ink/65">
+                          See earlier challenges, outcomes, notes, and ratings in one place.
+                        </p>
+                      </div>
+                      <Badge tone="default">{state.matchHistory.length} matches</Badge>
+                    </div>
+
+                    <div className="mt-5 space-y-3">
+                      {state.matchHistory.length === 0 ? (
+                        <p className="rounded-3xl bg-white/80 p-5 text-sm text-ink/65">
+                          No matches yet. Start a task from the board to begin your history.
+                        </p>
+                      ) : null}
+
+                      {state.matchHistory.map((match) => (
+                        <div key={match.id} className="rounded-3xl bg-white/85 p-4 shadow-sm">
+                          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="flex min-w-0 gap-4">
+                              {match.taskImageUrl ? (
+                                <img
+                                  src={match.taskImageUrl}
+                                  alt={match.taskTitle}
+                                  className="h-16 w-16 shrink-0 rounded-2xl object-cover"
+                                />
+                              ) : null}
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="truncate font-semibold text-ink">{match.taskTitle}</p>
+                                  <Badge tone={historyResultTone(match.result)}>
+                                    {formatHistoryResultLabel(match.result)}
+                                  </Badge>
+                                  <Badge tone={match.taskType === "competitive" ? "accent" : "success"}>
+                                    {match.taskType}
+                                  </Badge>
+                                </div>
+                                <p className="mt-2 text-sm text-ink/65">
+                                  {match.wasChallenger ? "You challenged" : "You were challenged by"}{" "}
+                                  {match.opponentTeamName}
+                                </p>
+                                <p className="mt-1 text-xs uppercase tracking-[0.22em] text-ink/45">
+                                  {new Date(match.createdAt).toLocaleString("en-GB")}
+                                  {match.resolvedAt
+                                    ? ` • finished ${new Date(match.resolvedAt).toLocaleString("en-GB")}`
+                                    : ""}
+                                </p>
+                              </div>
+                            </div>
+
+                            <Button type="button" tone="ghost" onClick={() => setSelectedTaskId(match.taskId)}>
+                              Open task
+                            </Button>
+                          </div>
+
+                          {match.note ? (
+                            <p className="mt-4 rounded-2xl bg-ink/5 px-4 py-3 text-sm leading-6 text-ink/70">
+                              {match.note}
+                            </p>
+                          ) : null}
+
+                          {match.myRating || match.opponentRating ? (
+                            <div className="mt-4 flex flex-wrap gap-3 text-sm text-ink/65">
+                              <div className="rounded-2xl bg-ink/5 px-4 py-3">
+                                Your rating: {match.myRating ? `${formatStars(match.myRating)} / 5` : "Not rated"}
+                              </div>
+                              <div className="rounded-2xl bg-ink/5 px-4 py-3">
+                                Opponent rating:{" "}
+                                {match.opponentRating ? `${formatStars(match.opponentRating)} / 5` : "Not rated"}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               ) : null}
 
@@ -705,9 +834,16 @@ export function PlayerApp({
                       </p>
                     ) : (
                       <>
+                        {teamOptions.length === 0 ? (
+                          <p className="rounded-2xl bg-white/75 px-4 py-3 text-sm text-ink/65">
+                            No other teams can be challenged yet. Opponent teams only appear here after they lock in
+                            their team name.
+                          </p>
+                        ) : null}
                         <Select
                           value={opponentTeamId}
                           onChange={(event) => setOpponentTeamId(event.target.value)}
+                          disabled={teamOptions.length === 0}
                         >
                           <option value="">Choose an opponent team</option>
                           {teamOptions.map((team) => {
@@ -722,7 +858,7 @@ export function PlayerApp({
                         </Select>
                         <Button
                           onClick={handleCreateChallenge}
-                          disabled={!opponentTeamId || busyAction === "challenge"}
+                          disabled={!opponentTeamId || teamOptions.length === 0 || busyAction === "challenge"}
                         >
                           {busyAction === "challenge" ? "Creating..." : "Create challenge"}
                         </Button>
@@ -795,7 +931,7 @@ export function PlayerApp({
                                       tone="danger"
                                       onClick={() =>
                                         handleResolveChallenge({
-                                          status: "cancelled",
+                                          status: "failed",
                                         })
                                       }
                                       disabled={busyAction === "resolve"}
@@ -861,25 +997,25 @@ export function PlayerApp({
       {state.team ? (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/70 bg-white/90 px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3 backdrop-blur lg:hidden">
           <div className="mx-auto flex max-w-xl gap-2">
-            {(["board", "active", "leaderboard", "team"] as PlayerView[]).map((tab) => (
+            {(["board", "history", "leaderboard", "team"] as PlayerView[]).map((tab) => (
               <button
                 key={tab}
                 type="button"
                 className={cn(
                   "min-h-11 flex-1 rounded-full px-3 text-sm font-semibold capitalize",
                   view === tab ? "bg-ink text-white" : "bg-ink/5 text-ink/60",
-                  challengeLockActive && tab !== "active" ? "cursor-not-allowed opacity-50" : "",
+                  challengeLockActive && tab !== "history" ? "cursor-not-allowed opacity-50" : "",
                 )}
                 onClick={() => {
-                  if (challengeLockActive && tab !== "active") {
+                  if (challengeLockActive && tab !== "history") {
                     return;
                   }
 
                   setView(tab);
                 }}
-                disabled={challengeLockActive && tab !== "active"}
+                disabled={challengeLockActive && tab !== "history"}
               >
-                {tab}
+                {getPlayerViewLabel(tab)}
               </button>
             ))}
           </div>

@@ -23,6 +23,7 @@ export const taskTypeEnum = pgEnum("task_type", ["competitive", "cooperative"]);
 export const challengeStatusEnum = pgEnum("challenge_status", [
   "open",
   "resolved",
+  "failed",
   "cancelled",
 ]);
 

@@ -182,6 +182,12 @@ function ensureCustomTeamName(team: Pick<TeamRecord, "name"> | null | undefined)
   }
 }
 
+function ensureChallengeableTeamName(team: Pick<TeamRecord, "name"> | null | undefined) {
+  if (!team?.name) {
+    throw new AppError("That team must lock in a name before it can be challenged.");
+  }
+}
+
 function taskRatingKey(challengeId: string, teamId: string) {
   return `${challengeId}:${teamId}`;
 }
@@ -205,6 +211,35 @@ function buildTaskRatingSummary(ratings: TaskRatingRecord[]) {
   });
 
   return byTask;
+}
+
+function getMatchHistoryResult(input: {
+  status: ChallengeRecord["status"];
+  type: ChallengeRecord["type"];
+  winnerTeamId: string | null;
+  myTeamId: string;
+}) {
+  if (input.status === "open") {
+    return "in_progress";
+  }
+
+  if (input.type === "cooperative") {
+    if (input.status === "resolved") {
+      return "completed";
+    }
+
+    if (input.status === "failed") {
+      return "failed";
+    }
+
+    return "cancelled";
+  }
+
+  if (!input.winnerTeamId) {
+    return input.status === "cancelled" ? "cancelled" : "no_result";
+  }
+
+  return input.winnerTeamId === input.myTeamId ? "win" : "loss";
 }
 
 function normalizeTaskImage(input: { imagePath?: string | null; imageUrl?: string | null }) {
@@ -577,6 +612,7 @@ export async function getPlayerState(slug: string, authUserId: string) {
       ? eventChallenges.find(
           (challenge) =>
             challenge.status !== "open" &&
+            challenge.status !== "cancelled" &&
             (challenge.challengerTeamId === myTeam.id || challenge.opponentTeamId === myTeam.id) &&
             !ratingsByChallengeTeam.has(taskRatingKey(challenge.id, myTeam.id)),
         ) ?? null
@@ -584,6 +620,53 @@ export async function getPlayerState(slug: string, authUserId: string) {
   const activeChallenge = openChallenge ?? pendingRatingChallenge;
 
   const taskById = new Map(eventTasks.map((task) => [task.id, task]));
+  const matchHistory =
+    myTeamId === null
+      ? []
+      : eventChallenges
+          .filter(
+            (challenge) =>
+              challenge.challengerTeamId === myTeamId || challenge.opponentTeamId === myTeamId,
+          )
+          .map((challenge) => {
+            const task = taskById.get(challenge.taskId);
+            const opponentTeamId =
+              challenge.challengerTeamId === myTeamId
+                ? challenge.opponentTeamId
+                : challenge.challengerTeamId;
+            const myRating = ratingsByChallengeTeam.get(taskRatingKey(challenge.id, myTeamId));
+            const opponentRating = ratingsByChallengeTeam.get(
+              taskRatingKey(challenge.id, opponentTeamId),
+            );
+
+            return {
+              id: challenge.id,
+              taskId: challenge.taskId,
+              taskTitle: task?.title ?? "Task",
+              taskType: challenge.type,
+              taskImageUrl: task?.imageUrl ?? null,
+              challengerTeamId: challenge.challengerTeamId,
+              opponentTeamId,
+              opponentTeamName:
+                eventTeams.find((team) => team.id === opponentTeamId)?.name ??
+                eventTeams.find((team) => team.id === opponentTeamId)?.autoName ??
+                "Team",
+              status: challenge.status,
+              result: getMatchHistoryResult({
+                status: challenge.status,
+                type: challenge.type,
+                winnerTeamId: challenge.winnerTeamId,
+                myTeamId,
+              }),
+              wasChallenger: challenge.challengerTeamId === myTeamId,
+              winnerTeamId: challenge.winnerTeamId,
+              note: challenge.note,
+              createdAt: challenge.createdAt,
+              resolvedAt: challenge.resolvedAt,
+              myRating: myRating?.stars ?? null,
+              opponentRating: opponentRating?.stars ?? null,
+            };
+          });
   const board = stateRows
     .map((state) => {
       const task = taskById.get(state.taskId);
@@ -684,6 +767,7 @@ export async function getPlayerState(slug: string, authUserId: string) {
             activeChallenge.status === "open" && activeChallenge.challengerTeamId === myTeam?.id,
           canRateByMe:
             activeChallenge.status !== "open" &&
+            activeChallenge.status !== "cancelled" &&
             Boolean(myTeamId) &&
             !ratingsByChallengeTeam.has(taskRatingKey(activeChallenge.id, myTeamId ?? "")),
           myRating: myTeamId
@@ -691,6 +775,7 @@ export async function getPlayerState(slug: string, authUserId: string) {
             : null,
         }
       : null,
+    matchHistory,
     leaderboard,
   };
 }
@@ -750,7 +835,7 @@ export async function createChallenge(slug: string, authUserId: string, input: u
     throw new AppError("Choose another team to challenge.");
   }
 
-  const [task, challengerState, opponentState, openChallenges] = await Promise.all([
+  const [task, challengerState, opponentState, opponentTeam, openChallenges] = await Promise.all([
     db.query.tasks.findFirst({
       where: and(eq(tasks.id, parsed.taskId), eq(tasks.gameInstanceId, context.event.id)),
     }),
@@ -763,12 +848,17 @@ export async function createChallenge(slug: string, authUserId: string, input: u
     db.query.teamTaskStates.findFirst({
       where: and(eq(teamTaskStates.teamId, parsed.opponentTeamId), eq(teamTaskStates.taskId, parsed.taskId)),
     }),
+    db.query.teams.findFirst({
+      where: and(eq(teams.id, parsed.opponentTeamId), eq(teams.gameInstanceId, context.event.id)),
+    }),
     db.select().from(challenges).where(eq(challenges.gameInstanceId, context.event.id)),
   ]);
 
-  if (!task || !challengerState || !opponentState) {
+  if (!task || !challengerState || !opponentState || !opponentTeam) {
     throw new AppError("Task or team state not found.", 404);
   }
+
+  ensureChallengeableTeamName(opponentTeam);
 
   const blockedOpenChallenge = openChallenges.find(
     (challenge) =>
@@ -863,6 +953,14 @@ export async function resolveChallenge(
       parsed.winnerTeamId !== challenge.opponentTeamId
     ) {
       throw new AppError("Pick whether your team won or lost.");
+    }
+
+    if (challenge.type === "competitive" && status === "failed") {
+      throw new AppError("Competitive challenges must be marked as won, lost, or cancelled.");
+    }
+
+    if (challenge.type === "cooperative" && parsed.winnerTeamId) {
+      throw new AppError("Cooperative challenges do not have a winner.");
     }
 
     if (status === "cancelled" && parsed.winnerTeamId) {
@@ -1413,6 +1511,14 @@ export async function overrideChallenge(
       throw new AppError("Cooperative tasks do not have a winner.");
     }
 
+    if (challenge.type === "competitive" && parsed.status === "failed") {
+      throw new AppError("Competitive challenges cannot be marked as failed.");
+    }
+
+    if (parsed.status === "cancelled" && parsed.winnerTeamId) {
+      throw new AppError("Cancelled challenges cannot have a winner.");
+    }
+
     const [updated] = await tx
       .update(challenges)
       .set({
@@ -1422,7 +1528,7 @@ export async function overrideChallenge(
             ? parsed.winnerTeamId
             : null,
         note: parsed.note ?? null,
-        resolvedAt: parsed.status === "resolved" ? new Date() : null,
+        resolvedAt: parsed.status === "cancelled" ? null : new Date(),
       })
       .where(eq(challenges.id, challenge.id))
       .returning();

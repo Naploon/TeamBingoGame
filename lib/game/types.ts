@@ -1,6 +1,6 @@
 export type GameStatus = "draft" | "registration_open" | "live" | "ended";
 export type TaskType = "competitive" | "cooperative";
-export type ChallengeStatus = "open" | "resolved" | "cancelled";
+export type ChallengeStatus = "open" | "resolved" | "failed" | "cancelled";
 export type CompletionTier = "none" | "base" | "gold" | "platinum";
 export type CompletionSource = "none" | "win" | "loss_protection" | "cooperative";
 

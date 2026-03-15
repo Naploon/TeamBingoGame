@@ -256,6 +256,32 @@ describe("game engine", () => {
     expect(states.every((state) => state.completionSource === "cooperative")).toBe(true);
   });
 
+  it("counts failed cooperative attempts as losses without treating them as cancellations", () => {
+    const assignments = generateBoardAssignments(["team-a", "team-b"], ["task-1"], 303);
+
+    const states = recomputeTeamTaskStates({
+      assignments,
+      tasks: [{ id: "task-1", type: "cooperative" }],
+      challenges: [
+        {
+          id: "challenge-1",
+          taskId: "task-1",
+          challengerTeamId: "team-a",
+          opponentTeamId: "team-b",
+          type: "cooperative",
+          status: "failed",
+          winnerTeamId: null,
+          createdAt: "2026-03-15T10:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(states.every((state) => state.lossCount === 1)).toBe(true);
+    expect(states.every((state) => state.winCount === 0)).toBe(true);
+    expect(states.every((state) => state.completionTier === "none")).toBe(true);
+    expect(states.every((state) => state.completionSource === "none")).toBe(true);
+  });
+
   it("caps competitive wins at platinum", () => {
     const assignments = generateBoardAssignments(["team-a", "team-b"], ["task-1"], 55);
 
