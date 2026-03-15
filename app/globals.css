@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top left, rgba(238, 108, 77, 0.18), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(47, 102, 144, 0.18), transparent 34%),
+    #f6f1e8;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  color: #10212f;
+  font-family:
+    "Avenir Next",
+    "Trebuchet MS",
+    "Segoe UI",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(47, 102, 144, 0.18);
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
