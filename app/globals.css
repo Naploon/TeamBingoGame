@@ -12,6 +12,8 @@
 
 html {
   min-height: 100%;
+  width: 100%;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at top left, rgba(238, 108, 77, 0.18), transparent 30%),
     radial-gradient(circle at bottom right, rgba(47, 102, 144, 0.18), transparent 34%),
@@ -20,7 +22,10 @@ html {
 
 body {
   min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
   margin: 0;
+  overflow-x: hidden;
   color: #10212f;
   font-family:
     "Avenir Next",
@@ -29,6 +34,10 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+body[data-scroll-locked="true"] {
+  touch-action: none;
 }
 
 a {

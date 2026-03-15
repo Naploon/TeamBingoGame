@@ -18,7 +18,7 @@ export function AppSurface({
   return (
     <main
       className={cn(
-        "mx-auto min-h-screen w-full max-w-6xl px-4 pb-24 pt-6 sm:px-6 lg:px-8",
+        "mx-auto min-h-[100dvh] w-full max-w-6xl overflow-x-clip px-4 pb-[calc(env(safe-area-inset-bottom)+6rem)] pt-[max(env(safe-area-inset-top),1.25rem)] sm:px-6 sm:pt-6 lg:px-8",
         className,
       )}
     >
@@ -121,7 +121,7 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       className={cn(
-        "min-h-11 w-full rounded-2xl border border-ink/10 bg-white px-4 py-3 text-sm text-ink shadow-sm outline-none transition placeholder:text-ink/35 focus:border-sea/40 focus:ring-2 focus:ring-sea/15",
+        "min-h-11 w-full rounded-2xl border border-ink/10 bg-white px-4 py-3 text-base text-ink shadow-sm outline-none transition placeholder:text-ink/35 focus:border-sea/40 focus:ring-2 focus:ring-sea/15 sm:text-sm",
         props.className,
       )}
       {...props}
@@ -133,7 +133,7 @@ export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
       className={cn(
-        "min-h-[120px] w-full rounded-3xl border border-ink/10 bg-white px-4 py-3 text-sm text-ink shadow-sm outline-none transition placeholder:text-ink/35 focus:border-sea/40 focus:ring-2 focus:ring-sea/15",
+        "min-h-[120px] w-full rounded-3xl border border-ink/10 bg-white px-4 py-3 text-base text-ink shadow-sm outline-none transition placeholder:text-ink/35 focus:border-sea/40 focus:ring-2 focus:ring-sea/15 sm:text-sm",
         props.className,
       )}
       {...props}
@@ -149,7 +149,7 @@ export function Select({
   return (
     <select
       className={cn(
-        "min-h-11 w-full rounded-2xl border border-ink/10 bg-white px-4 py-3 text-sm text-ink shadow-sm outline-none transition focus:border-sea/40 focus:ring-2 focus:ring-sea/15",
+        "min-h-11 w-full rounded-2xl border border-ink/10 bg-white px-4 py-3 text-base text-ink shadow-sm outline-none transition focus:border-sea/40 focus:ring-2 focus:ring-sea/15 sm:text-sm",
         className,
       )}
       {...props}

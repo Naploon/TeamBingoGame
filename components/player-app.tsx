@@ -246,6 +246,46 @@ export function PlayerApp({
     ? "Choose a team name before starting any tasks."
     : "Your captain must choose a team name before your team can start tasks.";
 
+  useEffect(() => {
+    if (!selectedTask && !showInitialTeamSetup) {
+      return;
+    }
+
+    const scrollY = window.scrollY;
+    const bodyStyle = document.body.style;
+    const htmlStyle = document.documentElement.style;
+    const previous = {
+      bodyPosition: bodyStyle.position,
+      bodyTop: bodyStyle.top,
+      bodyLeft: bodyStyle.left,
+      bodyRight: bodyStyle.right,
+      bodyWidth: bodyStyle.width,
+      bodyOverflow: bodyStyle.overflow,
+      htmlOverflow: htmlStyle.overflow,
+    };
+
+    document.body.dataset.scrollLocked = "true";
+    bodyStyle.position = "fixed";
+    bodyStyle.top = `-${scrollY}px`;
+    bodyStyle.left = "0";
+    bodyStyle.right = "0";
+    bodyStyle.width = "100%";
+    bodyStyle.overflow = "hidden";
+    htmlStyle.overflow = "hidden";
+
+    return () => {
+      bodyStyle.position = previous.bodyPosition;
+      bodyStyle.top = previous.bodyTop;
+      bodyStyle.left = previous.bodyLeft;
+      bodyStyle.right = previous.bodyRight;
+      bodyStyle.width = previous.bodyWidth;
+      bodyStyle.overflow = previous.bodyOverflow;
+      htmlStyle.overflow = previous.htmlOverflow;
+      delete document.body.dataset.scrollLocked;
+      window.scrollTo(0, scrollY);
+    };
+  }, [selectedTask, showInitialTeamSetup]);
+
   function getTeamLabel(teamId?: string | null) {
     if (!teamId) {
       return "Team";
@@ -492,7 +532,7 @@ export function PlayerApp({
       ) : (
         <>
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
-            <Panel>
+            <Panel className="min-w-0">
               <div className="mb-4 flex gap-2 rounded-full bg-ink/5 p-1">
                 {(["board", "history", "leaderboard", "team"] as PlayerView[]).map((tab) => (
                   <button
@@ -518,28 +558,30 @@ export function PlayerApp({
               </div>
 
               {view === "board" ? (
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid min-w-0 grid-cols-4 gap-1.5 sm:gap-2">
                   {state.board.map((card, index) => (
                     <button
                       key={card.taskId}
                       type="button"
                       className={cn(
-                        "aspect-square rounded-[1.35rem] border p-2 text-left transition hover:-translate-y-0.5",
+                        "aspect-square min-w-0 overflow-hidden rounded-[1.15rem] border p-1.5 text-left transition hover:-translate-y-0.5 sm:rounded-[1.35rem] sm:p-2",
                         tierClasses(card.completionTier),
                       )}
                       onClick={() => setSelectedTaskId(card.taskId)}
                     >
-                      <div className="flex h-full flex-col justify-between">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink/50">
+                      <div className="flex h-full min-w-0 flex-col justify-between">
+                        <p className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-ink/50 sm:text-[11px] sm:tracking-[0.18em]">
                           {index + 1}
                         </p>
-                        <div>
-                          <p className="line-clamp-2 text-sm font-semibold text-ink">{card.title}</p>
-                          <p className="mt-1 text-[11px] text-ink/60">
+                        <div className="min-w-0">
+                          <p className="line-clamp-2 text-[13px] font-semibold leading-tight text-ink sm:text-sm">
+                            {card.title}
+                          </p>
+                          <p className="mt-1 truncate text-[10px] text-ink/60 sm:text-[11px]">
                             {card.type === "competitive" ? "Vs task" : "Shared task"}
                           </p>
                         </div>
-                        <p className="text-[11px] text-ink/65">
+                        <p className="truncate text-[10px] text-ink/65 sm:text-[11px]">
                           {card.completionTier === "none"
                             ? "Open"
                             : `${formatTierLabel(card.completionTier)} • W${card.winCount}/L${card.lossCount}`}
@@ -723,7 +765,7 @@ export function PlayerApp({
               ) : null}
             </Panel>
 
-            <Panel className="hidden lg:block">
+            <Panel className="hidden min-w-0 lg:block">
               <SectionHeading
                 eyebrow="Live leaderboard"
                 title="Standings"
@@ -749,8 +791,8 @@ export function PlayerApp({
           </div>
 
           {selectedTask ? (
-            <div className="fixed inset-0 z-40 bg-ink/45 sm:flex sm:items-center sm:justify-center sm:p-6">
-              <div className="h-[100dvh] w-full overflow-y-auto bg-mist px-4 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-[max(env(safe-area-inset-top),1rem)] shadow-panel sm:max-h-[92vh] sm:max-w-2xl sm:rounded-[2rem] sm:p-6">
+            <div className="fixed inset-0 z-40 overflow-hidden bg-ink/45 sm:flex sm:items-center sm:justify-center sm:p-6">
+              <div className="h-[100dvh] w-full overflow-y-auto overscroll-y-contain bg-mist px-4 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-[max(env(safe-area-inset-top),1rem)] shadow-panel sm:max-h-[92vh] sm:max-w-2xl sm:rounded-[2rem] sm:p-6">
                 <div className="sticky top-0 z-10 -mx-4 -mt-[max(env(safe-area-inset-top),1rem)] flex items-start justify-between gap-4 bg-mist/95 px-4 pb-4 pt-[max(env(safe-area-inset-top),1rem)] backdrop-blur sm:static sm:m-0 sm:bg-transparent sm:p-0">
                   <div>
                     <Badge tone={selectedTask.type === "competitive" ? "accent" : "success"}>
@@ -1023,7 +1065,7 @@ export function PlayerApp({
       ) : null}
 
       {showInitialTeamSetup && state.team ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/55 p-0 sm:items-center sm:p-6">
+        <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-ink/55 p-0 sm:items-center sm:p-6">
           <div className="w-full max-w-2xl rounded-t-[2rem] bg-mist p-5 shadow-panel sm:rounded-[2rem] sm:p-6">
             <Badge tone="accent">Team setup</Badge>
             <div className="mt-4">
