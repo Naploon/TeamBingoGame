@@ -53,7 +53,7 @@ npm run dev
 - Add your local and production callback URLs:
   - `http://localhost:3000/auth/callback`
   - `https://your-production-domain/auth/callback`
-- Default organizer email is `karl7899@gmail.com` via `ADMIN_ALLOWLIST`.
+- Set `ADMIN_ALLOWLIST` to the organizer emails that should be allowed to access the admin area.
 
 ## Deployment
 

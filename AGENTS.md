@@ -9,8 +9,8 @@
 - Vercel project name: `team-bingo-game`
 - Vercel production alias: `https://team-bingo-game.vercel.app`
 - Vercel scope used during setup: `karl7899-7240s-projects`
-- Supabase project URL: `https://jhjyoxcumojheuxfvkee.supabase.co`
-- Admin email allowlist default: `karl7899@gmail.com`
+- Supabase project values are configured in local and Vercel environment variables; do not hardcode them into tracked files.
+- Admin allowlist values are environment-specific and must stay out of tracked docs/examples.
 
 ## Before changing deployment
 - Read [`docs/deployment-runbook.md`](./docs/deployment-runbook.md).
