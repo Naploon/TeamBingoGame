@@ -44,13 +44,18 @@ export class AppError extends Error {
   }
 }
 
-function toFriendlyError(error: unknown, duplicateMessage: string): never {
-  if (
+function isUniqueViolation(error: unknown, constraint?: string) {
+  return (
     typeof error === "object" &&
     error !== null &&
     "code" in error &&
-    error.code === "23505"
-  ) {
+    error.code === "23505" &&
+    (constraint === undefined || ("constraint" in error && error.constraint === constraint))
+  );
+}
+
+function toFriendlyError(error: unknown, duplicateMessage: string): never {
+  if (isUniqueViolation(error)) {
     throw new AppError(duplicateMessage);
   }
 
@@ -81,7 +86,7 @@ async function ensureUniqueSlug(title: string) {
 
 async function ensureUniqueJoinCode() {
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const joinCode = generateJoinCode(Date.now() + attempt + randomInt(1, 1000));
+    const joinCode = generateJoinCode();
     const existing = await db.query.gameInstances.findFirst({
       where: eq(gameInstances.joinCode, joinCode),
       columns: { id: true },
@@ -92,7 +97,7 @@ async function ensureUniqueJoinCode() {
     }
   }
 
-  return generateJoinCode(Date.now() + randomInt(1000, 5000));
+  return generateJoinCode();
 }
 
 async function getEventBySlug(slug: string) {
@@ -162,6 +167,12 @@ async function getPlayerContext(slug: string, authUserId: string) {
     player: row.player,
     team,
   };
+}
+
+function ensureCustomTeamName(team: Pick<TeamRecord, "name"> | null | undefined) {
+  if (!team?.name) {
+    throw new AppError("Your captain must choose a team name before your team can start tasks.");
+  }
 }
 
 async function writeAuditLog(
@@ -260,20 +271,33 @@ export async function listEvents() {
 export async function createEvent(input: unknown) {
   const parsed = createEventSchema.parse(input);
   const slug = await ensureUniqueSlug(parsed.title);
-  const joinCode = await ensureUniqueJoinCode();
 
-  const [event] = await db
-    .insert(gameInstances)
-    .values({
-      title: parsed.title,
-      slug,
-      joinCode,
-      targetTeamSize: parsed.targetTeamSize,
-      seed: randomInt(100_000, 999_999_999),
-    })
-    .returning();
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const joinCode = await ensureUniqueJoinCode();
 
-  return event;
+    try {
+      const [event] = await db
+        .insert(gameInstances)
+        .values({
+          title: parsed.title,
+          slug,
+          joinCode,
+          targetTeamSize: parsed.targetTeamSize,
+          seed: randomInt(100_000, 999_999_999),
+        })
+        .returning();
+
+      return event;
+    } catch (error) {
+      if (isUniqueViolation(error, "game_instances_join_code_idx")) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new AppError("Could not generate a unique join code. Please try again.", 500);
 }
 
 export async function updateEvent(slug: string, input: unknown, adminId: string) {
@@ -512,6 +536,7 @@ export async function getPlayerState(slug: string, authUserId: string) {
         canChallenge:
           context.event.status === "live" &&
           !activeChallenge &&
+          state.completionTier !== "platinum" &&
           !(task.type === "cooperative" && isCompleted(state.completionTier)),
       };
     })
@@ -598,6 +623,14 @@ export async function renameTeam(slug: string, authUserId: string, input: unknow
     throw new AppError("Only the captain can rename the team.", 403);
   }
 
+  if (context.event.status !== "live") {
+    throw new AppError("Team names can only be set once the game is live.");
+  }
+
+  if (context.team.name) {
+    throw new AppError("Team name is locked once it has been chosen.");
+  }
+
   try {
     const [updated] = await db
       .update(teams)
@@ -626,6 +659,8 @@ export async function createChallenge(slug: string, authUserId: string, input: u
   if (!context.player.teamId) {
     throw new AppError("You are not on a team yet.");
   }
+
+  ensureCustomTeamName(context.team);
 
   if (parsed.opponentTeamId === context.player.teamId) {
     throw new AppError("Choose another team to challenge.");
@@ -670,6 +705,16 @@ export async function createChallenge(slug: string, authUserId: string, input: u
     }
   }
 
+  if (task.type === "competitive") {
+    if (challengerState.completionTier === "platinum") {
+      throw new AppError("Your team has already reached platinum on this task.");
+    }
+
+    if (opponentState.completionTier === "platinum") {
+      throw new AppError("That team has already reached platinum on this task.");
+    }
+  }
+
   if (
     task.type === "competitive" &&
     challengerState.lastLossOpponentTeamId === parsed.opponentTeamId
@@ -706,6 +751,8 @@ export async function resolveChallenge(
     throw new AppError("You are not on a team yet.");
   }
 
+  ensureCustomTeamName(context.team);
+
   return db.transaction(async (tx) => {
     const challenge = await tx.query.challenges.findFirst({
       where: and(eq(challenges.id, challengeId), eq(challenges.gameInstanceId, context.event.id)),
@@ -719,12 +766,18 @@ export async function resolveChallenge(
       throw new AppError("Only the challenging team can submit the result.", 403);
     }
 
-    if (
-      challenge.type === "competitive" &&
-      parsed.winnerTeamId !== challenge.challengerTeamId &&
-      parsed.winnerTeamId !== challenge.opponentTeamId
-    ) {
-      throw new AppError("Pick the winning team for this challenge.");
+    if (challenge.type === "competitive") {
+      if (
+        parsed.winnerTeamId !== challenge.challengerTeamId &&
+        parsed.winnerTeamId !== challenge.opponentTeamId
+      ) {
+        throw new AppError("Pick whether your team won or lost.");
+      }
+    }
+
+    const status = challenge.type === "cooperative" ? parsed.status ?? "resolved" : "resolved";
+    if (challenge.type === "competitive" && status !== "resolved") {
+      throw new AppError("Competitive challenges must end in a win or a loss.");
     }
 
     const winnerTeamId = challenge.type === "competitive" ? parsed.winnerTeamId ?? null : null;
@@ -732,10 +785,10 @@ export async function resolveChallenge(
     const [updated] = await tx
       .update(challenges)
       .set({
-        status: "resolved",
+        status,
         winnerTeamId,
         note: parsed.note ?? null,
-        resolvedAt: new Date(),
+        resolvedAt: status === "resolved" ? new Date() : null,
       })
       .where(eq(challenges.id, challenge.id))
       .returning();
@@ -755,6 +808,11 @@ export async function createTask(slug: string, input: unknown, adminId: string) 
   }
 
   const existingTasks = await db.select().from(tasks).where(eq(tasks.gameInstanceId, event.id));
+  const activeTaskCount = existingTasks.filter((task) => task.isActive).length;
+
+  if (parsed.isActive && activeTaskCount >= 16) {
+    throw new AppError("Only 16 tasks can be active at a time. Mark another task inactive first.");
+  }
 
   const [task] = await db
     .insert(tasks)
@@ -799,6 +857,19 @@ export async function updateTask(
 
   if (event.status === "ended") {
     throw new AppError("Ended events are read-only.");
+  }
+
+  if (!task.isActive && parsed.isActive) {
+    const activeTaskCount = (
+      await db
+        .select()
+        .from(tasks)
+        .where(and(eq(tasks.gameInstanceId, event.id), eq(tasks.isActive, true)))
+    ).length;
+
+    if (activeTaskCount >= 16) {
+      throw new AppError("Only 16 tasks can be active at a time. Mark another task inactive first.");
+    }
   }
 
   const nextValues =
@@ -862,8 +933,8 @@ export async function startGame(slug: string, adminId: string) {
     throw new AppError("This event has already been started.");
   }
 
-  if (registrations.length < 4) {
-    throw new AppError("At least 4 players are required to start the game.");
+  if (registrations.length < 2) {
+    throw new AppError("At least 2 players are required to start the game.");
   }
 
   if (Math.ceil(registrations.length / event.targetTeamSize) < 2) {

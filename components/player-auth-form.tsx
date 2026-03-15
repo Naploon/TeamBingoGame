@@ -45,24 +45,27 @@ export function PlayerAuthForm({
         return;
       }
 
-      const { data, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/join/${joinCode}`,
+      const response = await fetch(`/api/join/${joinCode}/auth/signup`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          email,
+          password,
+        }),
       });
+      const payload = await response.json();
 
-      if (authError) {
-        throw authError;
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not create account.");
       }
 
-      if (data.session) {
-        window.location.assign(`/join/${joinCode}`);
-        return;
-      }
-
-      setMessage("Account created. Confirm your email, then sign in to finish joining.");
+      setMode("sign_in");
+      setMessage(
+        payload.message ??
+          "Account created. Email confirmation is skipped for now, so you can sign in right away.",
+      );
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Authentication failed.");
     } finally {

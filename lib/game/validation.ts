@@ -6,12 +6,12 @@ export const registerPlayerSchema = z.object({
 
 export const createEventSchema = z.object({
   title: z.string().trim().min(3).max(80),
-  targetTeamSize: z.coerce.number().int().min(2).max(10),
+  targetTeamSize: z.coerce.number().int().min(1).max(10),
 });
 
 export const updateEventSchema = z.object({
   title: z.string().trim().min(3).max(80),
-  targetTeamSize: z.coerce.number().int().min(2).max(10),
+  targetTeamSize: z.coerce.number().int().min(1).max(10),
   status: z.enum(["draft", "registration_open", "live", "ended"]).optional(),
 });
 
@@ -35,6 +35,7 @@ export const createChallengeSchema = z.object({
 export const resolveChallengeSchema = z.object({
   winnerTeamId: z.string().uuid().optional(),
   note: z.string().trim().max(300).optional(),
+  status: z.enum(["resolved", "cancelled"]).optional(),
 });
 
 export const overrideChallengeSchema = z.object({

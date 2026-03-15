@@ -67,7 +67,7 @@ export function AdminIndex({ initialEvents }: { initialEvents: AdminEvents }) {
           />
           <Input
             type="number"
-            min={2}
+            min={1}
             max={10}
             value={targetTeamSize}
             onChange={(event) => setTargetTeamSize(event.target.value)}

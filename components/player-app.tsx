@@ -36,7 +36,6 @@ export function PlayerApp({
   const [view, setView] = useState<PlayerView>("board");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [opponentTeamId, setOpponentTeamId] = useState("");
-  const [winnerTeamId, setWinnerTeamId] = useState("");
   const [note, setNote] = useState("");
   const [teamName, setTeamName] = useState(
     initialState.team?.name ?? initialState.team?.autoName ?? "",
@@ -95,11 +94,23 @@ export function PlayerApp({
   const myTeamId = state.team?.id ?? null;
   const activeChallengeTaskId = activeChallenge?.taskId ?? null;
   const teamOptions = state.teams.filter((team) => team.id !== myTeamId);
+  const teamNeedsName = Boolean(state.team && !state.team.name);
+  const showInitialTeamSetup = state.event.status === "live" && Boolean(state.team) && teamNeedsName;
+  const taskStartBlockedMessage = state.me.isCaptain
+    ? "Choose a team name before starting any tasks."
+    : "Your captain must choose a team name before your team can start tasks.";
+
+  function getTeamLabel(teamId?: string | null) {
+    if (!teamId) {
+      return "Team";
+    }
+
+    return state.teams.find((team) => team.id === teamId)?.name ?? "Team";
+  }
 
   useEffect(() => {
     if (selectedTask) {
       setOpponentTeamId("");
-      setWinnerTeamId("");
       setNote("");
     }
   }, [selectedTaskId]);
@@ -170,7 +181,10 @@ export function PlayerApp({
     }
   }
 
-  async function handleResolveChallenge() {
+  async function handleResolveChallenge(input?: {
+    winnerTeamId?: string;
+    status?: "resolved" | "cancelled";
+  }) {
     if (!activeChallenge) {
       return;
     }
@@ -186,7 +200,8 @@ export function PlayerApp({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          winnerTeamId: activeChallenge.type === "competitive" ? winnerTeamId : undefined,
+          winnerTeamId: input?.winnerTeamId,
+          status: input?.status,
           note,
         }),
       });
@@ -194,7 +209,6 @@ export function PlayerApp({
 
       setMessage("Result submitted.");
       setSelectedTaskId(null);
-      setWinnerTeamId("");
       setNote("");
       await refreshNow();
     } catch (resolveError) {
@@ -237,6 +251,11 @@ export function PlayerApp({
 
       {message ? <p className="rounded-2xl bg-mint/15 px-4 py-3 text-sm text-ink">{message}</p> : null}
       {error ? <p className="rounded-2xl bg-coral/15 px-4 py-3 text-sm text-coral">{error}</p> : null}
+      {state.event.status === "live" && state.team && teamNeedsName ? (
+        <p className="rounded-2xl bg-gold/20 px-4 py-3 text-sm text-ink">
+          {taskStartBlockedMessage}
+        </p>
+      ) : null}
 
       {state.event.status !== "live" || !state.team ? (
         <Panel>
@@ -337,11 +356,8 @@ export function PlayerApp({
                       <p className="text-xs uppercase tracking-[0.24em] text-sea/80">Current challenge</p>
                       <h3 className="mt-2 text-xl font-semibold text-ink">{activeChallenge.taskTitle}</h3>
                       <p className="mt-2 text-sm text-ink/70">
-                        {
-                          state.teams.find((team) => team.id === activeChallenge.challengerTeamId)?.name
-                        }{" "}
-                        vs{" "}
-                        {state.teams.find((team) => team.id === activeChallenge.opponentTeamId)?.name}
+                        {getTeamLabel(activeChallenge.challengerTeamId)} vs{" "}
+                        {getTeamLabel(activeChallenge.opponentTeamId)}
                       </p>
                       <p className="mt-3 text-sm text-ink/60">
                         {activeChallenge.isResolvableByMe
@@ -396,21 +412,27 @@ export function PlayerApp({
                     ))}
                   </div>
 
-                  {state.me.isCaptain ? (
+                  {teamNeedsName && state.me.isCaptain ? (
                     <form className="space-y-3 rounded-3xl bg-sand/35 p-5" onSubmit={handleRenameTeam}>
-                      <p className="text-sm font-semibold text-ink">Rename team</p>
+                      <p className="text-sm font-semibold text-ink">Choose your team name</p>
                       <Input
                         value={teamName}
                         onChange={(event) => setTeamName(event.target.value)}
                         placeholder="Choose a team name"
                       />
                       <Button type="submit" disabled={busyAction === "rename"}>
-                        {busyAction === "rename" ? "Saving..." : "Save team name"}
+                        {busyAction === "rename" ? "Saving..." : "Lock in team name"}
                       </Button>
                     </form>
+                  ) : state.me.isCaptain ? (
+                    <p className="rounded-3xl bg-ink/5 p-4 text-sm text-ink/60">
+                      Team name is locked in for the rest of the game.
+                    </p>
                   ) : (
                     <p className="rounded-3xl bg-ink/5 p-4 text-sm text-ink/60">
-                      Only the captain can rename the team.
+                      {teamNeedsName
+                        ? "Only the captain can choose the team name."
+                        : "Team name is locked in for the rest of the game."}
                     </p>
                   )}
                 </div>
@@ -469,9 +491,7 @@ export function PlayerApp({
                 {selectedTask.lastLossOpponentTeamId ? (
                   <p className="mt-4 rounded-2xl bg-gold/15 px-4 py-3 text-sm text-ink/75">
                     Your next attempt on this task cannot be against{" "}
-                    {
-                      state.teams.find((team) => team.id === selectedTask.lastLossOpponentTeamId)?.name
-                    }
+                    {getTeamLabel(selectedTask.lastLossOpponentTeamId)}
                     .
                   </p>
                 ) : null}
@@ -479,27 +499,35 @@ export function PlayerApp({
                 {!activeChallenge && selectedTask.canChallenge ? (
                   <div className="mt-6 space-y-4 rounded-3xl bg-white/75 p-5">
                     <h4 className="text-lg font-semibold text-ink">Start a challenge</h4>
-                    <Select
-                      value={opponentTeamId}
-                      onChange={(event) => setOpponentTeamId(event.target.value)}
-                    >
-                      <option value="">Choose an opponent team</option>
-                      {teamOptions.map((team) => {
-                        const isBlocked = selectedTask.lastLossOpponentTeamId === team.id;
-                        return (
-                          <option key={team.id} value={team.id} disabled={isBlocked}>
-                            {team.name}
-                            {isBlocked ? " (blocked after last loss)" : ""}
-                          </option>
-                        );
-                      })}
-                    </Select>
-                    <Button
-                      onClick={handleCreateChallenge}
-                      disabled={!opponentTeamId || busyAction === "challenge"}
-                    >
-                      {busyAction === "challenge" ? "Creating..." : "Create challenge"}
-                    </Button>
+                    {teamNeedsName ? (
+                      <p className="rounded-2xl bg-gold/15 px-4 py-3 text-sm text-ink/75">
+                        {taskStartBlockedMessage}
+                      </p>
+                    ) : (
+                      <>
+                        <Select
+                          value={opponentTeamId}
+                          onChange={(event) => setOpponentTeamId(event.target.value)}
+                        >
+                          <option value="">Choose an opponent team</option>
+                          {teamOptions.map((team) => {
+                            const isBlocked = selectedTask.lastLossOpponentTeamId === team.id;
+                            return (
+                              <option key={team.id} value={team.id} disabled={isBlocked}>
+                                {team.name}
+                                {isBlocked ? " (blocked after last loss)" : ""}
+                              </option>
+                            );
+                          })}
+                        </Select>
+                        <Button
+                          onClick={handleCreateChallenge}
+                          disabled={!opponentTeamId || busyAction === "challenge"}
+                        >
+                          {busyAction === "challenge" ? "Creating..." : "Create challenge"}
+                        </Button>
+                      </>
+                    )}
                   </div>
                 ) : null}
 
@@ -507,49 +535,80 @@ export function PlayerApp({
                   <div className="mt-6 space-y-4 rounded-3xl bg-sea/8 p-5">
                     <h4 className="text-lg font-semibold text-ink">Submit result</h4>
                     <p className="text-sm text-ink/65">
-                      {state.teams.find((team) => team.id === activeChallenge.challengerTeamId)?.name} vs{" "}
-                      {state.teams.find((team) => team.id === activeChallenge.opponentTeamId)?.name}
+                      {getTeamLabel(activeChallenge.challengerTeamId)} vs{" "}
+                      {getTeamLabel(activeChallenge.opponentTeamId)}
                     </p>
                     {activeChallenge.isResolvableByMe ? (
                       <>
-                        {activeChallenge.type === "competitive" ? (
-                          <Select
-                            value={winnerTeamId}
-                            onChange={(event) => setWinnerTeamId(event.target.value)}
-                          >
-                            <option value="">Select the winning team</option>
-                            <option value={activeChallenge.challengerTeamId}>
-                              {
-                                state.teams.find((team) => team.id === activeChallenge.challengerTeamId)
-                                  ?.name
-                              }
-                            </option>
-                            <option value={activeChallenge.opponentTeamId}>
-                              {
-                                state.teams.find((team) => team.id === activeChallenge.opponentTeamId)
-                                  ?.name
-                              }
-                            </option>
-                          </Select>
-                        ) : (
-                          <p className="rounded-2xl bg-white/75 px-4 py-3 text-sm text-ink/65">
-                            Cooperative task: submitting this marks the task complete for both teams.
+                        {teamNeedsName ? (
+                          <p className="rounded-2xl bg-gold/15 px-4 py-3 text-sm text-ink/75">
+                            {taskStartBlockedMessage}
                           </p>
+                        ) : (
+                          <>
+                            {activeChallenge.type === "competitive" ? (
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <Button
+                                  className="bg-mint text-ink hover:bg-mint/90"
+                                  onClick={() =>
+                                    handleResolveChallenge({
+                                      winnerTeamId: activeChallenge.challengerTeamId,
+                                    })
+                                  }
+                                  disabled={busyAction === "resolve"}
+                                >
+                                  {busyAction === "resolve" ? "Submitting..." : "We won"}
+                                </Button>
+                                <Button
+                                  tone="danger"
+                                  onClick={() =>
+                                    handleResolveChallenge({
+                                      winnerTeamId: activeChallenge.opponentTeamId,
+                                    })
+                                  }
+                                  disabled={busyAction === "resolve"}
+                                >
+                                  {busyAction === "resolve" ? "Submitting..." : "We lost"}
+                                </Button>
+                              </div>
+                            ) : (
+                              <>
+                                <p className="rounded-2xl bg-white/75 px-4 py-3 text-sm text-ink/65">
+                                  Cooperative task: mark whether both teams got it done or had to give up.
+                                </p>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <Button
+                                    className="bg-mint text-ink hover:bg-mint/90"
+                                    onClick={() =>
+                                      handleResolveChallenge({
+                                        status: "resolved",
+                                      })
+                                    }
+                                    disabled={busyAction === "resolve"}
+                                  >
+                                    {busyAction === "resolve" ? "Submitting..." : "Tegimegi!"}
+                                  </Button>
+                                  <Button
+                                    tone="danger"
+                                    onClick={() =>
+                                      handleResolveChallenge({
+                                        status: "cancelled",
+                                      })
+                                    }
+                                    disabled={busyAction === "resolve"}
+                                  >
+                                    {busyAction === "resolve" ? "Submitting..." : "ei saand hakkama"}
+                                  </Button>
+                                </div>
+                              </>
+                            )}
+                          </>
                         )}
                         <Textarea
                           placeholder="Optional result note"
                           value={note}
                           onChange={(event) => setNote(event.target.value)}
                         />
-                        <Button
-                          onClick={handleResolveChallenge}
-                          disabled={
-                            busyAction === "resolve" ||
-                            (activeChallenge.type === "competitive" && !winnerTeamId)
-                          }
-                        >
-                          {busyAction === "resolve" ? "Submitting..." : "Submit result"}
-                        </Button>
                       </>
                     ) : (
                       <p className="rounded-2xl bg-white/75 px-4 py-3 text-sm text-ink/65">
@@ -586,6 +645,58 @@ export function PlayerApp({
                 {tab}
               </button>
             ))}
+          </div>
+        </div>
+      ) : null}
+
+      {showInitialTeamSetup && state.team ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/55 p-0 sm:items-center sm:p-6">
+          <div className="w-full max-w-2xl rounded-t-[2rem] bg-mist p-5 shadow-panel sm:rounded-[2rem] sm:p-6">
+            <Badge tone="accent">Team setup</Badge>
+            <div className="mt-4">
+              <SectionHeading
+                eyebrow="Random teams are ready"
+                title={state.me.isCaptain ? "Choose your team name" : "Meet your team"}
+                description={
+                  state.me.isCaptain
+                    ? "Before your team can start tasks, pick a name once and lock it in."
+                    : "Your captain must pick a team name before tasks can begin."
+                }
+              />
+            </div>
+
+            <div className="mt-6 rounded-3xl bg-ink/5 p-5">
+              <p className="text-xs uppercase tracking-[0.22em] text-ink/45">Your teammates</p>
+              <div className="mt-4 space-y-3">
+                {state.team.members.map((member) => (
+                  <div
+                    key={member.id}
+                    className="flex items-center justify-between rounded-2xl bg-white/80 px-4 py-3"
+                  >
+                    <p className="font-medium text-ink">{member.displayName}</p>
+                    {member.isCaptain ? <Badge tone="accent">Captain</Badge> : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {state.me.isCaptain ? (
+              <form className="mt-6 space-y-3 rounded-3xl bg-sand/35 p-5" onSubmit={handleRenameTeam}>
+                <p className="text-sm font-semibold text-ink">Final team name</p>
+                <Input
+                  value={teamName}
+                  onChange={(event) => setTeamName(event.target.value)}
+                  placeholder="Choose a team name"
+                />
+                <Button type="submit" disabled={busyAction === "rename"}>
+                  {busyAction === "rename" ? "Saving..." : "Lock in team name"}
+                </Button>
+              </form>
+            ) : (
+              <p className="mt-6 rounded-3xl bg-white/80 px-4 py-4 text-sm text-ink/70">
+                Waiting for your captain to choose the final team name.
+              </p>
+            )}
           </div>
         </div>
       ) : null}

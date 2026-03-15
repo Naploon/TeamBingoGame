@@ -22,6 +22,46 @@ describe("game engine", () => {
     });
   });
 
+  it("supports solo teams when target size is 1", () => {
+    const players = Array.from({ length: 4 }, (_, index) => ({
+      id: `player-${index + 1}`,
+      displayName: `Player ${index + 1}`,
+    }));
+
+    const teams = generateTeamPlan(players, 1, 12_345);
+
+    expect(teams).toHaveLength(4);
+    teams.forEach((team) => {
+      expect(team.playerIds).toHaveLength(1);
+      expect(team.playerIds[0]).toBe(team.captainPlayerId);
+    });
+  });
+
+  it("still creates two team slots when fewer than two teams would exist", () => {
+    const teams = generateTeamPlan(
+      [
+        {
+          id: "player-1",
+          displayName: "Player 1",
+        },
+      ],
+      4,
+      12_345,
+    );
+
+    expect(teams).toHaveLength(2);
+    expect(teams[0]).toMatchObject({
+      autoName: "Squad 1",
+      playerIds: ["player-1"],
+      captainPlayerId: "player-1",
+    });
+    expect(teams[1]).toMatchObject({
+      autoName: "Squad 2",
+      playerIds: [],
+      captainPlayerId: undefined,
+    });
+  });
+
   it("creates a unique board order per team from the same 16 tasks", () => {
     const taskIds = Array.from({ length: 16 }, (_, index) => `task-${index + 1}`);
     const assignments = generateBoardAssignments(["team-a", "team-b"], taskIds, 99);
@@ -169,5 +209,61 @@ describe("game engine", () => {
     ).toBe(true);
     expect(leaderboard[0]).toMatchObject({ teamName: "Alpha", completedCount: 2 });
     expect(leaderboard[1]).toMatchObject({ teamName: "Beta", completedCount: 1 });
+  });
+
+  it("caps competitive wins at platinum", () => {
+    const assignments = generateBoardAssignments(["team-a", "team-b"], ["task-1"], 55);
+
+    const states = recomputeTeamTaskStates({
+      assignments,
+      tasks: [{ id: "task-1", type: "competitive" }],
+      challenges: [
+        {
+          id: "challenge-1",
+          taskId: "task-1",
+          challengerTeamId: "team-a",
+          opponentTeamId: "team-b",
+          type: "competitive",
+          status: "resolved",
+          winnerTeamId: "team-a",
+          createdAt: "2026-03-15T10:00:00.000Z",
+        },
+        {
+          id: "challenge-2",
+          taskId: "task-1",
+          challengerTeamId: "team-a",
+          opponentTeamId: "team-b",
+          type: "competitive",
+          status: "resolved",
+          winnerTeamId: "team-a",
+          createdAt: "2026-03-15T10:05:00.000Z",
+        },
+        {
+          id: "challenge-3",
+          taskId: "task-1",
+          challengerTeamId: "team-a",
+          opponentTeamId: "team-b",
+          type: "competitive",
+          status: "resolved",
+          winnerTeamId: "team-a",
+          createdAt: "2026-03-15T10:10:00.000Z",
+        },
+        {
+          id: "challenge-4",
+          taskId: "task-1",
+          challengerTeamId: "team-a",
+          opponentTeamId: "team-b",
+          type: "competitive",
+          status: "resolved",
+          winnerTeamId: "team-a",
+          createdAt: "2026-03-15T10:15:00.000Z",
+        },
+      ],
+    });
+
+    const teamA = states.find((state) => state.teamId === "team-a")!;
+
+    expect(teamA.winCount).toBe(3);
+    expect(teamA.completionTier).toBe("platinum");
   });
 });

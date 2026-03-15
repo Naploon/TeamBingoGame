@@ -1,4 +1,8 @@
+import { randomBytes } from "crypto";
+
 import { clsx, type ClassValue } from "clsx";
+
+const JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
@@ -17,17 +21,12 @@ export function normalizeKey(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-export function generateJoinCode(seed = Date.now()) {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let cursor = seed;
-  let result = "";
+export function formatJoinCode(bytes: Uint8Array) {
+  return Array.from(bytes, (byte) => JOIN_CODE_ALPHABET[byte % JOIN_CODE_ALPHABET.length]).join("");
+}
 
-  for (let index = 0; index < 6; index += 1) {
-    cursor = (cursor * 1664525 + 1013904223) % 4294967296;
-    result += alphabet[cursor % alphabet.length];
-  }
-
-  return result;
+export function generateJoinCode() {
+  return formatJoinCode(randomBytes(6));
 }
 
 export function formatDateTime(value?: string | Date | null) {

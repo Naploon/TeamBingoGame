@@ -110,7 +110,7 @@ function applyCompetitiveWin(
   state: ComputedTeamTaskState,
   taskType: TaskSeedInput["type"],
 ) {
-  state.winCount += 1;
+  state.winCount = Math.min(3, state.winCount + 1);
   state.lastLossOpponentTeamId = null;
   const computedTier = tierFromWins(state.winCount);
   if (computedTier !== "none") {

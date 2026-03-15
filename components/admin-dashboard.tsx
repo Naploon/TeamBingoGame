@@ -15,6 +15,7 @@ export function AdminDashboard({
   initialState: AdminState;
 }) {
   const [state, setState] = useState(initialState);
+  const activeTaskCount = state.tasks.filter((task) => task.isActive).length;
   const [eventTitle, setEventTitle] = useState(initialState.event.title);
   const [targetTeamSize, setTargetTeamSize] = useState(String(initialState.event.targetTeamSize));
   const [taskDraft, setTaskDraft] = useState({
@@ -207,7 +208,7 @@ export function AdminDashboard({
               <Input value={eventTitle} onChange={(event) => setEventTitle(event.target.value)} />
               <Input
                 type="number"
-                min={2}
+                min={1}
                 max={10}
                 value={targetTeamSize}
                 onChange={(event) => setTargetTeamSize(event.target.value)}
@@ -221,8 +222,8 @@ export function AdminDashboard({
           <Panel>
             <SectionHeading
               eyebrow="Tasks"
-              title={`Task deck (${state.tasks.length}/16 active)`}
-              description="Create all 16 active tasks before starting. Once live, only task text stays editable."
+              title={`Task deck (${activeTaskCount}/16 active)`}
+              description="Exactly 16 tasks can be active before starting. Extra tasks can stay in the deck as inactive backups."
             />
             <form
               className="mt-6 grid gap-3"
