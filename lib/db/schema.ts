@@ -87,6 +87,8 @@ export const playerRegistrations = pgTable(
       .notNull()
       .references(() => gameInstances.id, { onDelete: "cascade" }),
     teamId: uuid("team_id").references(() => teams.id, { onDelete: "set null" }),
+    authUserId: text("auth_user_id"),
+    email: text("email"),
     displayName: text("display_name").notNull(),
     displayNameKey: text("display_name_key").notNull(),
     isCaptain: boolean("is_captain").notNull().default(false),
@@ -96,6 +98,10 @@ export const playerRegistrations = pgTable(
     uniquePlayerNameIdx: uniqueIndex("player_registrations_game_display_name_idx").on(
       table.gameInstanceId,
       table.displayNameKey,
+    ),
+    uniquePlayerAuthUserIdx: uniqueIndex("player_registrations_game_auth_user_idx").on(
+      table.gameInstanceId,
+      table.authUserId,
     ),
   }),
 );

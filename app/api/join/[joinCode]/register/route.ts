@@ -1,29 +1,30 @@
-import { NextResponse } from "next/server";
-
-import { PLAYER_SESSION_COOKIE } from "@/lib/auth/player";
+import { getPlayerAuthUser } from "@/lib/auth/player";
+import { AppError, registerPlayer } from "@/lib/game/service";
 import { jsonError } from "@/lib/http";
-import { registerPlayer } from "@/lib/game/service";
 
 export async function POST(
   request: Request,
   { params }: { params: { joinCode: string } },
 ) {
+  const playerUser = await getPlayerAuthUser();
+  if (!playerUser?.email) {
+    return jsonError(new AppError("Unauthorized", 401));
+  }
+
   try {
     const body = await request.json();
-    const result = await registerPlayer(params.joinCode.toUpperCase(), body);
-    const response = NextResponse.json({
+    const result = await registerPlayer(
+      params.joinCode.toUpperCase(),
+      {
+        id: playerUser.id,
+        email: playerUser.email,
+      },
+      body,
+    );
+
+    return Response.json({
       redirectTo: `/play/${result.eventSlug}`,
     });
-
-    response.cookies.set(PLAYER_SESSION_COOKIE, result.sessionToken, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 14,
-    });
-
-    return response;
   } catch (error) {
     return jsonError(error);
   }

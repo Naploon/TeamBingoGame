@@ -27,6 +27,8 @@ export function AdminDashboard({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const canManageRegistrations =
+    state.event.status === "draft" || state.event.status === "registration_open";
 
   useEffect(() => {
     let cancelled = false;
@@ -74,18 +76,28 @@ export function AdminDashboard({
     setState(payload);
   }
 
-  async function postJson(path: string, body: Record<string, unknown>, action: string) {
+  async function requestJson(
+    path: string,
+    action: string,
+    options?: {
+      method?: "POST" | "DELETE";
+      body?: Record<string, unknown>;
+      successMessage?: string;
+    },
+  ) {
     setBusyAction(action);
     setError(null);
     setMessage(null);
 
     try {
       const response = await fetch(path, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
+        method: options?.method ?? "POST",
+        headers: options?.body
+          ? {
+              "Content-Type": "application/json",
+            }
+          : undefined,
+        body: options?.body ? JSON.stringify(options.body) : undefined,
       });
       const payload = await response.json();
 
@@ -93,7 +105,7 @@ export function AdminDashboard({
         throw new Error(payload.error ?? "Request failed.");
       }
 
-      setMessage("Saved.");
+      setMessage(options?.successMessage ?? "Saved.");
       await refreshNow();
       return payload;
     } catch (requestError) {
@@ -102,6 +114,21 @@ export function AdminDashboard({
     } finally {
       setBusyAction(null);
     }
+  }
+
+  function postJson(path: string, body: Record<string, unknown>, action: string, successMessage?: string) {
+    return requestJson(path, action, {
+      method: "POST",
+      body,
+      successMessage,
+    });
+  }
+
+  function deleteJson(path: string, action: string, successMessage?: string) {
+    return requestJson(path, action, {
+      method: "DELETE",
+      successMessage,
+    });
   }
 
   return (
@@ -392,13 +419,49 @@ export function AdminDashboard({
             <SectionHeading
               eyebrow="Registrations"
               title={`${state.registrations.length} players`}
-              description="Players appear here as soon as they register."
+              description={
+                canManageRegistrations
+                  ? "Players appear here as soon as they register. You can remove registrations before the game starts."
+                  : "Player removals lock once the game has started."
+              }
             />
             <div className="mt-5 space-y-3">
+              {state.registrations.length === 0 ? (
+                <p className="rounded-2xl bg-ink/5 px-4 py-3 text-sm text-ink/60">
+                  No players have registered yet.
+                </p>
+              ) : null}
               {state.registrations.map((player) => (
-                <div key={player.id} className="flex items-center justify-between rounded-2xl bg-ink/5 px-4 py-3">
-                  <p className="font-medium text-ink">{player.displayName}</p>
-                  <p className="text-sm text-ink/55">{player.teamId ? "Assigned" : "Waiting"}</p>
+                <div
+                  key={player.id}
+                  className="flex items-center justify-between gap-4 rounded-2xl bg-ink/5 px-4 py-3"
+                >
+                  <div>
+                    <p className="font-medium text-ink">{player.displayName}</p>
+                    <p className="text-sm text-ink/55">
+                      {player.email ? `${player.email} • ` : ""}
+                      {player.teamId ? "Assigned" : "Waiting"}
+                    </p>
+                  </div>
+                  {canManageRegistrations ? (
+                    <Button
+                      tone="danger"
+                      disabled={busyAction === `remove_registration_${player.id}`}
+                      onClick={() => {
+                        if (!window.confirm(`Remove ${player.displayName} from this event?`)) {
+                          return;
+                        }
+
+                        deleteJson(
+                          `/api/admin/events/${slug}/registrations/${player.id}`,
+                          `remove_registration_${player.id}`,
+                          "Player removed.",
+                        );
+                      }}
+                    >
+                      {busyAction === `remove_registration_${player.id}` ? "Removing..." : "Remove"}
+                    </Button>
+                  ) : null}
                 </div>
               ))}
             </div>

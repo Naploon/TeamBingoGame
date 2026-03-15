@@ -62,7 +62,7 @@ export function RegisterPlayerForm({
       </label>
       {error ? <p className="text-sm text-coral">{error}</p> : null}
       <Button type="submit" disabled={disabled || isSubmitting}>
-        {isSubmitting ? "Joining..." : "Join event"}
+        {isSubmitting ? "Saving..." : "Register and continue"}
       </Button>
     </form>
   );

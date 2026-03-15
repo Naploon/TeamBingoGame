@@ -1,24 +1,19 @@
+import { getPlayerAuthUser } from "@/lib/auth/player";
 import { AppError, getPlayerState } from "@/lib/game/service";
-import { PLAYER_SESSION_COOKIE } from "@/lib/auth/player";
 import { jsonError, jsonOk } from "@/lib/http";
 
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: { slug: string } },
 ) {
-  const sessionToken =
-    request.headers.get("cookie")
-      ?.split(";")
-      .map((chunk) => chunk.trim())
-      .find((chunk) => chunk.startsWith(`${PLAYER_SESSION_COOKIE}=`))
-      ?.split("=")[1] ?? null;
+  const playerUser = await getPlayerAuthUser();
 
-  if (!sessionToken) {
+  if (!playerUser) {
     return jsonError(new AppError("Unauthorized", 401));
   }
 
   try {
-    const state = await getPlayerState(params.slug, sessionToken);
+    const state = await getPlayerState(params.slug, playerUser.id);
     return jsonOk(state);
   } catch (error) {
     return jsonError(error);

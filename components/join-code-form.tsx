@@ -5,9 +5,15 @@ import { useState } from "react";
 
 import { Button, Input } from "@/components/ui";
 
-export function JoinCodeForm() {
+export function JoinCodeForm({
+  initialJoinCode = "",
+  submitLabel = "Join Event",
+}: {
+  initialJoinCode?: string;
+  submitLabel?: string;
+}) {
   const router = useRouter();
-  const [joinCode, setJoinCode] = useState("");
+  const [joinCode, setJoinCode] = useState(initialJoinCode);
 
   return (
     <form
@@ -29,7 +35,7 @@ export function JoinCodeForm() {
         autoCapitalize="characters"
       />
       <Button type="submit" className="sm:min-w-36">
-        Join Event
+        {submitLabel}
       </Button>
     </form>
   );

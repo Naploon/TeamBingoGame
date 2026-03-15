@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
+import { PlayerSignOutButton } from "@/components/player-sign-out-button";
 import { Badge, Button, Input, Panel, SectionHeading, Select, Textarea } from "@/components/ui";
 import type { getPlayerState } from "@/lib/game/service";
 import { cn } from "@/lib/utils";
@@ -44,6 +45,20 @@ export function PlayerApp({
   const [message, setMessage] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
 
+  async function readResponse(response: Response, fallbackMessage: string) {
+    const payload = await response.json();
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        window.location.assign("/?notice=session-expired");
+      }
+
+      throw new Error(payload.error ?? fallbackMessage);
+    }
+
+    return payload;
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -53,11 +68,7 @@ export function PlayerApp({
           method: "GET",
           cache: "no-store",
         });
-        const payload = await response.json();
-
-        if (!response.ok) {
-          throw new Error(payload.error ?? "Unable to refresh game state.");
-        }
+        const payload = await readResponse(response, "Unable to refresh game state.");
 
         if (!cancelled) {
           setState(payload);
@@ -98,11 +109,7 @@ export function PlayerApp({
       method: "GET",
       cache: "no-store",
     });
-    const payload = await response.json();
-
-    if (!response.ok) {
-      throw new Error(payload.error ?? "Could not refresh state.");
-    }
+    const payload = await readResponse(response, "Could not refresh state.");
 
     setState(payload);
   }
@@ -121,11 +128,7 @@ export function PlayerApp({
         },
         body: JSON.stringify({ teamName }),
       });
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Rename failed.");
-      }
+      await readResponse(response, "Rename failed.");
 
       setMessage("Team name updated.");
       await refreshNow();
@@ -156,11 +159,7 @@ export function PlayerApp({
           opponentTeamId,
         }),
       });
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Challenge creation failed.");
-      }
+      await readResponse(response, "Challenge creation failed.");
 
       setMessage("Challenge created. Complete the task, then submit the result.");
       await refreshNow();
@@ -191,11 +190,7 @@ export function PlayerApp({
           note,
         }),
       });
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Could not submit the result.");
-      }
+      await readResponse(response, "Could not submit the result.");
 
       setMessage("Result submitted.");
       setSelectedTaskId(null);
@@ -233,6 +228,9 @@ export function PlayerApp({
             <p className="text-sm text-white/75">
               {state.me.isCaptain ? "Captain" : "Team member"}
             </p>
+            <div className="mt-4">
+              <PlayerSignOutButton redirectTo="/" tone="secondary" />
+            </div>
           </div>
         </div>
       </Panel>

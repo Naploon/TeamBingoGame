@@ -1,4 +1,4 @@
-import { randomBytes, randomInt } from "crypto";
+import { randomInt } from "crypto";
 
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
@@ -8,12 +8,10 @@ import {
   challenges,
   gameInstances,
   playerRegistrations,
-  playerSessions,
   tasks,
   teams,
   teamTaskStates,
   type ChallengeRecord,
-  type GameInstanceRecord,
   type PlayerRegistrationRecord,
   type TaskRecord,
   type TeamRecord,
@@ -57,10 +55,6 @@ function toFriendlyError(error: unknown, duplicateMessage: string): never {
   }
 
   throw error;
-}
-
-function createSessionToken() {
-  return randomBytes(32).toString("hex");
 }
 
 function isCompleted(tier: string) {
@@ -125,39 +119,47 @@ async function getEventByJoinCode(joinCode: string) {
   return event;
 }
 
-async function getPlayerContext(slug: string, sessionToken: string) {
-  const sessionRow = await db
+async function getPlayerRow(slug: string, authUserId: string) {
+  const playerRows = await db
     .select({
       event: gameInstances,
       player: playerRegistrations,
-      session: playerSessions,
     })
-    .from(playerSessions)
-    .innerJoin(playerRegistrations, eq(playerSessions.playerId, playerRegistrations.id))
-    .innerJoin(gameInstances, eq(playerSessions.gameInstanceId, gameInstances.id))
-    .where(eq(playerSessions.sessionToken, sessionToken))
+    .from(playerRegistrations)
+    .innerJoin(gameInstances, eq(playerRegistrations.gameInstanceId, gameInstances.id))
+    .where(
+      and(
+        eq(playerRegistrations.authUserId, authUserId),
+        eq(gameInstances.slug, slug),
+      ),
+    )
     .limit(1);
 
-  const row = sessionRow[0];
+  return playerRows[0] ?? null;
+}
 
-  if (!row || row.event.slug !== slug) {
-    throw new AppError("Your session is no longer valid for this event.", 401);
+async function getPlayerTeam(player: Pick<PlayerRegistrationRecord, "teamId">) {
+  if (!player.teamId) {
+    return null;
   }
 
-  if (new Date(row.session.expiresAt).getTime() < Date.now()) {
-    throw new AppError("Your session has expired. Join again to continue.", 401);
+  return db.query.teams.findFirst({
+    where: eq(teams.id, player.teamId),
+  });
+}
+
+async function getPlayerContext(slug: string, authUserId: string) {
+  const row = await getPlayerRow(slug, authUserId);
+
+  if (!row) {
+    throw new AppError("You are not registered for this event.", 401);
   }
 
-  const team = row.player.teamId
-    ? await db.query.teams.findFirst({
-        where: eq(teams.id, row.player.teamId),
-      })
-    : null;
+  const team = await getPlayerTeam(row.player);
 
   return {
     event: row.event,
     player: row.player,
-    session: row.session,
     team,
   };
 }
@@ -342,7 +344,14 @@ export async function openRegistration(slug: string, adminId: string) {
   return updated;
 }
 
-export async function registerPlayer(joinCode: string, input: unknown) {
+export async function registerPlayer(
+  joinCode: string,
+  authUser: {
+    id: string;
+    email: string;
+  },
+  input: unknown,
+) {
   const parsed = registerPlayerSchema.parse(input);
   const event = await getEventByJoinCode(joinCode);
 
@@ -351,27 +360,34 @@ export async function registerPlayer(joinCode: string, input: unknown) {
   }
 
   return db.transaction(async (tx) => {
+    const existingPlayer = await tx.query.playerRegistrations.findFirst({
+      where: and(
+        eq(playerRegistrations.gameInstanceId, event.id),
+        eq(playerRegistrations.authUserId, authUser.id),
+      ),
+    });
+
+    if (existingPlayer) {
+      return {
+        eventSlug: event.slug,
+        playerId: existingPlayer.id,
+      };
+    }
+
     try {
       const [player] = await tx
         .insert(playerRegistrations)
         .values({
           gameInstanceId: event.id,
+          authUserId: authUser.id,
+          email: authUser.email.toLowerCase(),
           displayName: parsed.displayName,
           displayNameKey: normalizeKey(parsed.displayName),
         })
         .returning();
 
-      const sessionToken = createSessionToken();
-      await tx.insert(playerSessions).values({
-        gameInstanceId: event.id,
-        playerId: player.id,
-        sessionToken,
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14),
-      });
-
       return {
         eventSlug: event.slug,
-        sessionToken,
         playerId: player.id,
       };
     } catch (error) {
@@ -380,8 +396,47 @@ export async function registerPlayer(joinCode: string, input: unknown) {
   });
 }
 
-export async function resumePlayerSession(slug: string, sessionToken: string) {
-  return getPlayerContext(slug, sessionToken);
+export async function resumePlayerRegistration(slug: string, authUserId: string) {
+  return getPlayerContext(slug, authUserId);
+}
+
+export async function getLandingPlayerRegistration(authUserId: string) {
+  const rows = await db
+    .select({
+      event: gameInstances,
+      player: playerRegistrations,
+    })
+    .from(playerRegistrations)
+    .innerJoin(gameInstances, eq(playerRegistrations.gameInstanceId, gameInstances.id))
+    .where(eq(playerRegistrations.authUserId, authUserId))
+    .orderBy(desc(playerRegistrations.createdAt));
+
+  const row = rows.find((candidate) => candidate.event.status !== "ended") ?? rows[0] ?? null;
+
+  if (!row) {
+    return null;
+  }
+
+  const team = await getPlayerTeam(row.player);
+
+  return {
+    event: {
+      slug: row.event.slug,
+      title: row.event.title,
+      status: row.event.status,
+      joinCode: row.event.joinCode,
+    },
+    player: {
+      id: row.player.id,
+      displayName: row.player.displayName,
+    },
+    team: team
+      ? {
+          id: team.id,
+          name: team.name ?? team.autoName,
+        }
+      : null,
+  };
 }
 
 export async function getJoinEvent(joinCode: string) {
@@ -396,8 +451,8 @@ export async function getJoinEvent(joinCode: string) {
   };
 }
 
-export async function getPlayerState(slug: string, sessionToken: string) {
-  const context = await getPlayerContext(slug, sessionToken);
+export async function getPlayerState(slug: string, authUserId: string) {
+  const context = await getPlayerContext(slug, authUserId);
   const eventId = context.event.id;
 
   const [eventTeams, registrations, eventTasks, stateRows, eventChallenges] = await Promise.all([
@@ -531,9 +586,9 @@ export async function getPlayerState(slug: string, sessionToken: string) {
   };
 }
 
-export async function renameTeam(slug: string, sessionToken: string, input: unknown) {
+export async function renameTeam(slug: string, authUserId: string, input: unknown) {
   const parsed = renameTeamSchema.parse(input);
-  const context = await getPlayerContext(slug, sessionToken);
+  const context = await getPlayerContext(slug, authUserId);
 
   if (!context.team) {
     throw new AppError("You are not on a team yet.");
@@ -560,9 +615,9 @@ export async function renameTeam(slug: string, sessionToken: string, input: unkn
   }
 }
 
-export async function createChallenge(slug: string, sessionToken: string, input: unknown) {
+export async function createChallenge(slug: string, authUserId: string, input: unknown) {
   const parsed = createChallengeSchema.parse(input);
-  const context = await getPlayerContext(slug, sessionToken);
+  const context = await getPlayerContext(slug, authUserId);
 
   if (context.event.status !== "live") {
     throw new AppError("Challenges are only available once the game is live.");
@@ -640,12 +695,12 @@ export async function createChallenge(slug: string, sessionToken: string, input:
 
 export async function resolveChallenge(
   slug: string,
-  sessionToken: string,
+  authUserId: string,
   challengeId: string,
   input: unknown,
 ) {
   const parsed = resolveChallengeSchema.parse(input);
-  const context = await getPlayerContext(slug, sessionToken);
+  const context = await getPlayerContext(slug, authUserId);
 
   if (!context.player.teamId) {
     throw new AppError("You are not on a team yet.");
@@ -1024,6 +1079,46 @@ export async function switchCaptain(slug: string, input: unknown, adminId: strin
     });
 
     return updatedTeam;
+  });
+}
+
+export async function removePlayerRegistration(
+  slug: string,
+  playerId: string,
+  adminId: string,
+) {
+  const event = await getEventBySlug(slug);
+
+  if (event.status !== "draft" && event.status !== "registration_open") {
+    throw new AppError("Players can only be removed before the game starts.");
+  }
+
+  return db.transaction(async (tx) => {
+    const player = await tx.query.playerRegistrations.findFirst({
+      where: and(
+        eq(playerRegistrations.id, playerId),
+        eq(playerRegistrations.gameInstanceId, event.id),
+      ),
+    });
+
+    if (!player) {
+      throw new AppError("Player not found.", 404);
+    }
+
+    await tx.delete(playerRegistrations).where(eq(playerRegistrations.id, player.id));
+
+    await writeAuditLog(tx, {
+      adminId,
+      gameInstanceId: event.id,
+      actionType: "remove_registration",
+      entityType: "player_registration",
+      entityId: player.id,
+      beforeJson: player,
+    });
+
+    return {
+      playerId: player.id,
+    };
   });
 }
 
