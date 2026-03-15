@@ -133,9 +133,8 @@ function applyCompetitiveLoss(state: ComputedTeamTaskState, winnerTeamId: string
 }
 
 function applyCooperativeCompletion(state: ComputedTeamTaskState) {
-  if (state.completionTier === "none") {
-    state.completionTier = "base";
-  }
+  state.winCount = Math.min(3, state.winCount + 1);
+  state.completionTier = tierFromWins(state.winCount);
   state.completionSource = "cooperative";
   state.lastLossOpponentTeamId = null;
 }

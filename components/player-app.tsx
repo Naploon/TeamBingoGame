@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { FormEvent } from "react";
 
 import { PlayerSignOutButton } from "@/components/player-sign-out-button";
@@ -12,17 +12,117 @@ type PlayerState = Awaited<ReturnType<typeof getPlayerState>>;
 
 type PlayerView = "board" | "active" | "leaderboard" | "team";
 
+const STAR_PATH =
+  "M12 1.75l3.14 6.35 7.01 1.02-5.08 4.95 1.2 6.98L12 17.74 5.73 21.05l1.2-6.98-5.08-4.95 7.01-1.02L12 1.75Z";
+
 function tierClasses(tier: string) {
   switch (tier) {
     case "gold":
-      return "border-gold/60 bg-gold/20";
+      return "border-amber-300 bg-gradient-to-br from-amber-50 via-gold/35 to-amber-200 shadow-[0_8px_20px_rgba(245,158,11,0.18)]";
     case "platinum":
-      return "border-platinum/70 bg-platinum/25";
+      return "border-cyan-300 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.95),_rgba(191,219,254,0.92)_38%,_rgba(125,211,252,0.9)_72%,_rgba(34,211,238,0.82)_100%)] ring-2 ring-cyan-200 shadow-[0_0_24px_rgba(103,232,249,0.45)]";
     case "base":
-      return "border-sea/30 bg-sea/10";
+      return "border-emerald-300 bg-gradient-to-br from-emerald-50 via-mint/40 to-emerald-200 shadow-[0_6px_18px_rgba(52,211,153,0.18)]";
     default:
       return "border-ink/10 bg-white/70";
   }
+}
+
+function formatTierLabel(tier: string) {
+  switch (tier) {
+    case "platinum":
+      return "diamond";
+    default:
+      return tier;
+  }
+}
+
+function formatStars(value: number) {
+  return Number.isInteger(value) ? `${value}` : value.toFixed(1);
+}
+
+function StarIcon({
+  fill,
+  sizeClass,
+  clipId,
+}: {
+  fill: number;
+  sizeClass: string;
+  clipId: string;
+}) {
+  return (
+    <svg viewBox="0 0 24 24" className={cn("shrink-0", sizeClass)} aria-hidden="true">
+      <defs>
+        <clipPath id={clipId}>
+          <rect x="0" y="0" width={24 * fill} height="24" />
+        </clipPath>
+      </defs>
+      <path d={STAR_PATH} fill="rgba(15, 23, 42, 0.12)" />
+      <path d={STAR_PATH} fill="#fbbf24" clipPath={`url(#${clipId})`} />
+    </svg>
+  );
+}
+
+function StarRatingDisplay({
+  value,
+  size = "md",
+}: {
+  value: number;
+  size?: "sm" | "md";
+}) {
+  const idPrefix = useId();
+  const starSize = size === "sm" ? "h-4 w-4" : "h-7 w-7";
+
+  return (
+    <div className="flex items-center gap-0.5" aria-label={`${formatStars(value)} out of 5 stars`}>
+      {Array.from({ length: 5 }, (_, index) => {
+        const fill = Math.max(0, Math.min(1, value - index));
+        return <StarIcon key={index} fill={fill} sizeClass={starSize} clipId={`${idPrefix}-${index}`} />;
+      })}
+    </div>
+  );
+}
+
+function StarRatingPicker({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  disabled?: boolean;
+}) {
+  const idPrefix = useId();
+  return (
+    <div className="flex items-center justify-center gap-1 rounded-3xl bg-white/85 px-3 py-3">
+      {Array.from({ length: 5 }, (_, index) => {
+        const starNumber = index + 1;
+        const fill = Math.max(0, Math.min(1, value - index));
+
+        return (
+          <div key={starNumber} className="relative h-11 w-11">
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <StarIcon fill={fill} sizeClass="h-8 w-8" clipId={`${idPrefix}-${starNumber}`} />
+            </div>
+            <button
+              type="button"
+              className="absolute inset-y-0 left-0 w-1/2 rounded-l-full"
+              disabled={disabled}
+              aria-label={`Rate ${starNumber - 0.5} stars`}
+              onClick={() => onChange(starNumber - 0.5)}
+            />
+            <button
+              type="button"
+              className="absolute inset-y-0 right-0 w-1/2 rounded-r-full"
+              disabled={disabled}
+              aria-label={`Rate ${starNumber} stars`}
+              onClick={() => onChange(starNumber)}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export function PlayerApp({
@@ -37,6 +137,7 @@ export function PlayerApp({
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [opponentTeamId, setOpponentTeamId] = useState("");
   const [note, setNote] = useState("");
+  const [ratingStars, setRatingStars] = useState(0);
   const [teamName, setTeamName] = useState(
     initialState.team?.name ?? initialState.team?.autoName ?? "",
   );
@@ -96,6 +197,7 @@ export function PlayerApp({
   const teamOptions = state.teams.filter((team) => team.id !== myTeamId);
   const teamNeedsName = Boolean(state.team && !state.team.name);
   const showInitialTeamSetup = state.event.status === "live" && Boolean(state.team) && teamNeedsName;
+  const challengeLockActive = Boolean(activeChallenge);
   const taskStartBlockedMessage = state.me.isCaptain
     ? "Choose a team name before starting any tasks."
     : "Your captain must choose a team name before your team can start tasks.";
@@ -112,8 +214,16 @@ export function PlayerApp({
     if (selectedTask) {
       setOpponentTeamId("");
       setNote("");
+      setRatingStars(0);
     }
   }, [selectedTaskId]);
+
+  useEffect(() => {
+    if (activeChallenge) {
+      setView("active");
+      setSelectedTaskId(activeChallenge.taskId);
+    }
+  }, [activeChallenge?.id, activeChallenge?.taskId]);
 
   async function refreshNow() {
     const response = await fetch(`/api/play/${slug}/state`, {
@@ -207,12 +317,45 @@ export function PlayerApp({
       });
       await readResponse(response, "Could not submit the result.");
 
-      setMessage("Result submitted.");
-      setSelectedTaskId(null);
+      setMessage(input?.status === "cancelled" ? "Challenge cancelled." : "Result submitted.");
       setNote("");
+      setRatingStars(0);
       await refreshNow();
     } catch (resolveError) {
       setError(resolveError instanceof Error ? resolveError.message : "Submission failed.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleRateChallenge() {
+    if (!activeChallenge || ratingStars < 1) {
+      return;
+    }
+
+    setBusyAction("rate");
+    setError(null);
+    setMessage(null);
+
+    try {
+      const response = await fetch(`/api/play/${slug}/challenges/${activeChallenge.id}/rating`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          stars: ratingStars,
+        }),
+      });
+      await readResponse(response, "Could not save rating.");
+
+      setMessage("Thanks for rating the task.");
+      setSelectedTaskId(null);
+      setRatingStars(0);
+      setNote("");
+      await refreshNow();
+    } catch (ratingError) {
+      setError(ratingError instanceof Error ? ratingError.message : "Rating failed.");
     } finally {
       setBusyAction(null);
     }
@@ -308,8 +451,16 @@ export function PlayerApp({
                     className={cn(
                       "min-h-11 flex-1 rounded-full px-3 text-sm font-semibold capitalize transition",
                       view === tab ? "bg-ink text-white" : "text-ink/60",
+                      challengeLockActive && tab !== "active" ? "cursor-not-allowed opacity-50" : "",
                     )}
-                    onClick={() => setView(tab)}
+                    onClick={() => {
+                      if (challengeLockActive && tab !== "active") {
+                        return;
+                      }
+
+                      setView(tab);
+                    }}
+                    disabled={challengeLockActive && tab !== "active"}
                   >
                     {tab}
                   </button>
@@ -341,7 +492,7 @@ export function PlayerApp({
                         <p className="text-[11px] text-ink/65">
                           {card.completionTier === "none"
                             ? "Open"
-                            : `${card.completionTier} • W${card.winCount}/L${card.lossCount}`}
+                            : `${formatTierLabel(card.completionTier)} • W${card.winCount}/L${card.lossCount}`}
                         </p>
                       </div>
                     </button>
@@ -360,9 +511,13 @@ export function PlayerApp({
                         {getTeamLabel(activeChallenge.opponentTeamId)}
                       </p>
                       <p className="mt-3 text-sm text-ink/60">
-                        {activeChallenge.isResolvableByMe
-                          ? "Open the task card to submit the result."
-                          : "Waiting for the challenging team to submit the result."}
+                        {activeChallenge.status === "open"
+                          ? activeChallenge.isResolvableByMe
+                            ? "Your team is in this challenge now. Open the task card to submit the result or cancel it for both teams."
+                            : "Your team is locked to this challenge until the challenging team submits the result."
+                          : activeChallenge.canRateByMe
+                            ? "The result is in. Rate the task now to continue."
+                            : "Waiting for the other team to finish rating this task."}
                       </p>
                     </div>
                   ) : (
@@ -381,7 +536,7 @@ export function PlayerApp({
                         <p className="text-xs uppercase tracking-[0.22em] text-ink/45">#{index + 1}</p>
                         <p className="text-lg font-semibold text-ink">{team.teamName}</p>
                         <p className="text-xs text-ink/55">
-                          Gold {team.goldCount} • Platinum {team.platinumCount}
+                          Gold {team.goldCount} • Diamond {team.platinumCount}
                         </p>
                       </div>
                       <p className="text-2xl font-semibold text-ink">{team.completedCount}</p>
@@ -443,7 +598,7 @@ export function PlayerApp({
               <SectionHeading
                 eyebrow="Live leaderboard"
                 title="Standings"
-                description="Completed tasks decide the ranking. Gold and platinum are visual tie-break-free badges."
+                description="Completed tasks decide the ranking. Gold and diamond are visual tie-break-free badges."
               />
               <div className="mt-5 space-y-3">
                 {state.leaderboard.map((team, index) => (
@@ -456,7 +611,7 @@ export function PlayerApp({
                       <p className="text-xl font-semibold text-ink">{team.completedCount}</p>
                     </div>
                     <p className="mt-2 text-xs text-ink/55">
-                      Gold {team.goldCount} • Platinum {team.platinumCount}
+                      Gold {team.goldCount} • Diamond {team.platinumCount}
                     </p>
                   </div>
                 ))}
@@ -465,9 +620,9 @@ export function PlayerApp({
           </div>
 
           {selectedTask ? (
-            <div className="fixed inset-0 z-40 flex items-end justify-center bg-ink/45 p-0 sm:items-center sm:p-6">
-              <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-[2rem] bg-mist p-5 shadow-panel sm:rounded-[2rem] sm:p-6">
-                <div className="flex items-start justify-between gap-4">
+            <div className="fixed inset-0 z-40 bg-ink/45 sm:flex sm:items-center sm:justify-center sm:p-6">
+              <div className="h-[100dvh] w-full overflow-y-auto bg-mist px-4 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-[max(env(safe-area-inset-top),1rem)] shadow-panel sm:max-h-[92vh] sm:max-w-2xl sm:rounded-[2rem] sm:p-6">
+                <div className="sticky top-0 z-10 -mx-4 -mt-[max(env(safe-area-inset-top),1rem)] flex items-start justify-between gap-4 bg-mist/95 px-4 pb-4 pt-[max(env(safe-area-inset-top),1rem)] backdrop-blur sm:static sm:m-0 sm:bg-transparent sm:p-0">
                   <div>
                     <Badge tone={selectedTask.type === "competitive" ? "accent" : "success"}>
                       {selectedTask.type}
@@ -475,17 +630,62 @@ export function PlayerApp({
                     <h3 className="mt-3 text-2xl font-semibold text-ink">{selectedTask.title}</h3>
                     <p className="mt-2 text-sm text-ink/60">{selectedTask.shortDescription}</p>
                   </div>
-                  <Button tone="ghost" onClick={() => setSelectedTaskId(null)}>
-                    Close
-                  </Button>
+                  {activeChallenge && activeChallengeTaskId === selectedTask.taskId ? (
+                    activeChallenge.canCancelByMe ? (
+                      <Button
+                        tone="danger"
+                        onClick={() => {
+                          if (
+                            !window.confirm(
+                              "Are you sure you want to cancel this challenge for both teams?",
+                            )
+                          ) {
+                            return;
+                          }
+
+                          handleResolveChallenge({ status: "cancelled" });
+                        }}
+                        disabled={busyAction === "resolve"}
+                      >
+                        {busyAction === "resolve" ? "Cancelling..." : "Cancel challenge"}
+                      </Button>
+                    ) : (
+                      <Button tone="ghost" disabled>
+                        Challenge locked
+                      </Button>
+                    )
+                  ) : (
+                    <Button tone="ghost" onClick={() => setSelectedTaskId(null)}>
+                      Close
+                    </Button>
+                  )}
                 </div>
 
-                <div className="mt-6 rounded-3xl bg-white/80 p-5">
+                <div className="mt-6 space-y-4 rounded-3xl bg-white/80 p-5">
+                  {selectedTask.imageUrl ? (
+                    <img
+                      src={selectedTask.imageUrl}
+                      alt={selectedTask.title}
+                      className="h-52 w-full rounded-3xl object-cover sm:h-64"
+                    />
+                  ) : null}
                   <p className="text-sm leading-6 text-ink/80">{selectedTask.fullDescription}</p>
                   <p className="mt-4 text-xs uppercase tracking-[0.22em] text-ink/45">
-                    Progress: {selectedTask.completionTier} • Wins {selectedTask.winCount} • Losses{" "}
+                    Progress: {formatTierLabel(selectedTask.completionTier)} • Wins {selectedTask.winCount} • Losses{" "}
                     {selectedTask.lossCount}
                   </p>
+                  {selectedTask.ratingCount > 0 ? (
+                    <div className="mt-3 flex items-center gap-3">
+                      <StarRatingDisplay value={selectedTask.ratingAverage ?? 0} size="sm" />
+                      <p className="text-xs uppercase tracking-[0.22em] text-ink/45">
+                        {selectedTask.ratingAverage?.toFixed(1)} from {selectedTask.ratingCount} ratings
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs uppercase tracking-[0.22em] text-ink/45">
+                      Rating: No ratings yet
+                    </p>
+                  )}
                 </div>
 
                 {selectedTask.lastLossOpponentTeamId ? (
@@ -533,86 +733,115 @@ export function PlayerApp({
 
                 {activeChallenge && activeChallengeTaskId === selectedTask.taskId ? (
                   <div className="mt-6 space-y-4 rounded-3xl bg-sea/8 p-5">
-                    <h4 className="text-lg font-semibold text-ink">Submit result</h4>
+                    <h4 className="text-lg font-semibold text-ink">
+                      {activeChallenge.status === "open" ? "Submit result" : "Rate this task"}
+                    </h4>
                     <p className="text-sm text-ink/65">
                       {getTeamLabel(activeChallenge.challengerTeamId)} vs{" "}
                       {getTeamLabel(activeChallenge.opponentTeamId)}
                     </p>
-                    {activeChallenge.isResolvableByMe ? (
-                      <>
-                        {teamNeedsName ? (
-                          <p className="rounded-2xl bg-gold/15 px-4 py-3 text-sm text-ink/75">
-                            {taskStartBlockedMessage}
-                          </p>
-                        ) : (
-                          <>
-                            {activeChallenge.type === "competitive" ? (
-                              <div className="grid gap-3 sm:grid-cols-2">
-                                <Button
-                                  className="bg-mint text-ink hover:bg-mint/90"
-                                  onClick={() =>
-                                    handleResolveChallenge({
-                                      winnerTeamId: activeChallenge.challengerTeamId,
-                                    })
-                                  }
-                                  disabled={busyAction === "resolve"}
-                                >
-                                  {busyAction === "resolve" ? "Submitting..." : "We won"}
-                                </Button>
-                                <Button
-                                  tone="danger"
-                                  onClick={() =>
-                                    handleResolveChallenge({
-                                      winnerTeamId: activeChallenge.opponentTeamId,
-                                    })
-                                  }
-                                  disabled={busyAction === "resolve"}
-                                >
-                                  {busyAction === "resolve" ? "Submitting..." : "We lost"}
-                                </Button>
-                              </div>
-                            ) : (
-                              <>
-                                <p className="rounded-2xl bg-white/75 px-4 py-3 text-sm text-ink/65">
-                                  Cooperative task: mark whether both teams got it done or had to give up.
-                                </p>
+                    {activeChallenge.status === "open" ? (
+                      activeChallenge.isResolvableByMe ? (
+                        <>
+                          {teamNeedsName ? (
+                            <p className="rounded-2xl bg-gold/15 px-4 py-3 text-sm text-ink/75">
+                              {taskStartBlockedMessage}
+                            </p>
+                          ) : (
+                            <>
+                              {activeChallenge.type === "competitive" ? (
                                 <div className="grid gap-3 sm:grid-cols-2">
                                   <Button
                                     className="bg-mint text-ink hover:bg-mint/90"
                                     onClick={() =>
                                       handleResolveChallenge({
-                                        status: "resolved",
+                                        winnerTeamId: activeChallenge.challengerTeamId,
                                       })
                                     }
                                     disabled={busyAction === "resolve"}
                                   >
-                                    {busyAction === "resolve" ? "Submitting..." : "Tegimegi!"}
+                                    {busyAction === "resolve" ? "Submitting..." : "We won"}
                                   </Button>
                                   <Button
                                     tone="danger"
                                     onClick={() =>
                                       handleResolveChallenge({
-                                        status: "cancelled",
+                                        winnerTeamId: activeChallenge.opponentTeamId,
                                       })
                                     }
                                     disabled={busyAction === "resolve"}
                                   >
-                                    {busyAction === "resolve" ? "Submitting..." : "ei saand hakkama"}
+                                    {busyAction === "resolve" ? "Submitting..." : "We lost"}
                                   </Button>
                                 </div>
-                              </>
-                            )}
-                          </>
-                        )}
-                        <Textarea
-                          placeholder="Optional result note"
-                          value={note}
-                          onChange={(event) => setNote(event.target.value)}
-                        />
+                              ) : (
+                                <>
+                                  <p className="rounded-2xl bg-white/75 px-4 py-3 text-sm text-ink/65">
+                                    Cooperative task: mark whether both teams got it done or had to give up.
+                                  </p>
+                                  <div className="grid gap-3 sm:grid-cols-2">
+                                    <Button
+                                      className="bg-mint text-ink hover:bg-mint/90"
+                                      onClick={() =>
+                                        handleResolveChallenge({
+                                          status: "resolved",
+                                        })
+                                      }
+                                      disabled={busyAction === "resolve"}
+                                    >
+                                      {busyAction === "resolve" ? "Submitting..." : "Tegimegi!"}
+                                    </Button>
+                                    <Button
+                                      tone="danger"
+                                      onClick={() =>
+                                        handleResolveChallenge({
+                                          status: "cancelled",
+                                        })
+                                      }
+                                      disabled={busyAction === "resolve"}
+                                    >
+                                      {busyAction === "resolve" ? "Submitting..." : "ei saand hakkama"}
+                                    </Button>
+                                  </div>
+                                </>
+                              )}
+                            </>
+                          )}
+                          <Textarea
+                            placeholder="Optional result note"
+                            value={note}
+                            onChange={(event) => setNote(event.target.value)}
+                          />
+                        </>
+                      ) : (
+                        <p className="rounded-2xl bg-white/75 px-4 py-3 text-sm text-ink/65">
+                          Only the challenging team can submit the result.
+                        </p>
+                      )
+                    ) : activeChallenge.canRateByMe ? (
+                      <>
+                        <p className="rounded-2xl bg-white/75 px-4 py-3 text-sm text-ink/65">
+                          Give this task a star rating before leaving the challenge flow.
+                        </p>
+                        <div className="space-y-3">
+                          <StarRatingPicker
+                            value={ratingStars}
+                            onChange={setRatingStars}
+                            disabled={busyAction === "rate"}
+                          />
+                          <p className="text-center text-sm text-ink/60">
+                            {ratingStars > 0
+                              ? `${formatStars(ratingStars)} / 5`
+                              : "Tap the left or right side of a star for half or full ratings."}
+                          </p>
+                        </div>
+                        <Button onClick={handleRateChallenge} disabled={busyAction === "rate" || ratingStars < 1}>
+                          {busyAction === "rate" ? "Saving..." : "Submit rating"}
+                        </Button>
                       </>
                     ) : (
                       <p className="rounded-2xl bg-white/75 px-4 py-3 text-sm text-ink/65">
-                        Only the challenging team can submit the result.
+                        Waiting for the other team to submit its rating.
                       </p>
                     )}
                   </div>
@@ -639,8 +868,16 @@ export function PlayerApp({
                 className={cn(
                   "min-h-11 flex-1 rounded-full px-3 text-sm font-semibold capitalize",
                   view === tab ? "bg-ink text-white" : "bg-ink/5 text-ink/60",
+                  challengeLockActive && tab !== "active" ? "cursor-not-allowed opacity-50" : "",
                 )}
-                onClick={() => setView(tab)}
+                onClick={() => {
+                  if (challengeLockActive && tab !== "active") {
+                    return;
+                  }
+
+                  setView(tab);
+                }}
+                disabled={challengeLockActive && tab !== "active"}
               >
                 {tab}
               </button>

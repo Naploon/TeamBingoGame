@@ -8,12 +8,16 @@ import {
   challenges,
   gameInstances,
   playerRegistrations,
+  taskRatings,
+  taskTemplates,
   tasks,
   teams,
   teamTaskStates,
   type ChallengeRecord,
   type PlayerRegistrationRecord,
+  type TaskRatingRecord,
   type TaskRecord,
+  type TaskTemplateRecord,
   type TeamRecord,
 } from "@/lib/db/schema";
 import {
@@ -26,7 +30,10 @@ import {
   createChallengeSchema,
   createEventSchema,
   createTaskSchema,
+  createTaskFromTemplateSchema,
+  createTaskTemplateSchema,
   overrideChallengeSchema,
+  rateTaskSchema,
   registerPlayerSchema,
   renameTeamSchema,
   resolveChallengeSchema,
@@ -173,6 +180,53 @@ function ensureCustomTeamName(team: Pick<TeamRecord, "name"> | null | undefined)
   if (!team?.name) {
     throw new AppError("Your captain must choose a team name before your team can start tasks.");
   }
+}
+
+function taskRatingKey(challengeId: string, teamId: string) {
+  return `${challengeId}:${teamId}`;
+}
+
+function buildTaskRatingSummary(ratings: TaskRatingRecord[]) {
+  const byTask = new Map<string, { ratingCount: number; ratingAverage: number | null }>();
+  const grouped = new Map<string, number[]>();
+
+  ratings.forEach((rating) => {
+    const current = grouped.get(rating.taskId) ?? [];
+    current.push(rating.stars);
+    grouped.set(rating.taskId, current);
+  });
+
+  grouped.forEach((stars, taskId) => {
+    const total = stars.reduce((sum, value) => sum + value, 0);
+    byTask.set(taskId, {
+      ratingCount: stars.length,
+      ratingAverage: stars.length > 0 ? total / stars.length : null,
+    });
+  });
+
+  return byTask;
+}
+
+function normalizeTaskImage(input: { imagePath?: string | null; imageUrl?: string | null }) {
+  const imagePath = input.imagePath?.trim() || null;
+  const imageUrl = input.imageUrl?.trim() || null;
+
+  if (Boolean(imagePath) !== Boolean(imageUrl)) {
+    throw new AppError("Task image upload is incomplete. Please re-upload the image.");
+  }
+
+  return {
+    imagePath,
+    imageUrl,
+  };
+}
+
+function mapTaskTemplate(template: TaskTemplateRecord) {
+  return {
+    ...template,
+    imagePath: template.imagePath ?? null,
+    imageUrl: template.imageUrl ?? null,
+  };
 }
 
 async function writeAuditLog(
@@ -479,7 +533,7 @@ export async function getPlayerState(slug: string, authUserId: string) {
   const context = await getPlayerContext(slug, authUserId);
   const eventId = context.event.id;
 
-  const [eventTeams, registrations, eventTasks, stateRows, eventChallenges] = await Promise.all([
+  const [eventTeams, registrations, eventTasks, stateRows, eventChallenges, eventRatings] = await Promise.all([
     db.select().from(teams).where(eq(teams.gameInstanceId, eventId)).orderBy(asc(teams.createdAt)),
     db
       .select()
@@ -491,6 +545,7 @@ export async function getPlayerState(slug: string, authUserId: string) {
       ? db.select().from(teamTaskStates).where(eq(teamTaskStates.teamId, context.player.teamId))
       : Promise.resolve([]),
     db.select().from(challenges).where(eq(challenges.gameInstanceId, eventId)).orderBy(desc(challenges.createdAt)),
+    db.select().from(taskRatings).where(eq(taskRatings.gameInstanceId, eventId)),
   ]);
 
   const membersByTeam = new Map<string, PlayerRegistrationRecord[]>();
@@ -505,13 +560,28 @@ export async function getPlayerState(slug: string, authUserId: string) {
   });
 
   const myTeam = context.team;
-  const activeChallenge = myTeam
+  const ratingsByChallengeTeam = new Map(
+    eventRatings.map((rating) => [taskRatingKey(rating.challengeId, rating.teamId), rating]),
+  );
+  const taskRatingSummary = buildTaskRatingSummary(eventRatings);
+  const myTeamId = myTeam?.id ?? null;
+  const openChallenge = myTeam
     ? eventChallenges.find(
         (challenge) =>
           challenge.status === "open" &&
           (challenge.challengerTeamId === myTeam.id || challenge.opponentTeamId === myTeam.id),
       ) ?? null
     : null;
+  const pendingRatingChallenge =
+    myTeam && !openChallenge
+      ? eventChallenges.find(
+          (challenge) =>
+            challenge.status !== "open" &&
+            (challenge.challengerTeamId === myTeam.id || challenge.opponentTeamId === myTeam.id) &&
+            !ratingsByChallengeTeam.has(taskRatingKey(challenge.id, myTeam.id)),
+        ) ?? null
+      : null;
+  const activeChallenge = openChallenge ?? pendingRatingChallenge;
 
   const taskById = new Map(eventTasks.map((task) => [task.id, task]));
   const board = stateRows
@@ -527,17 +597,19 @@ export async function getPlayerState(slug: string, authUserId: string) {
         title: task.title,
         shortDescription: task.shortDescription,
         fullDescription: task.fullDescription,
+        imageUrl: task.imageUrl,
         type: task.type,
         completionTier: state.completionTier,
         completionSource: state.completionSource,
         winCount: state.winCount,
         lossCount: state.lossCount,
         lastLossOpponentTeamId: state.lastLossOpponentTeamId,
+        ratingAverage: taskRatingSummary.get(task.id)?.ratingAverage ?? null,
+        ratingCount: taskRatingSummary.get(task.id)?.ratingCount ?? 0,
         canChallenge:
           context.event.status === "live" &&
           !activeChallenge &&
-          state.completionTier !== "platinum" &&
-          !(task.type === "cooperative" && isCompleted(state.completionTier)),
+          state.completionTier !== "platinum",
       };
     })
     .filter((card): card is NonNullable<typeof card> => card !== null)
@@ -603,8 +675,20 @@ export async function getPlayerState(slug: string, authUserId: string) {
           winnerTeamId: activeChallenge.winnerTeamId,
           note: activeChallenge.note,
           type: activeChallenge.type,
+          status: activeChallenge.status,
           createdAt: activeChallenge.createdAt,
-          isResolvableByMe: activeChallenge.challengerTeamId === myTeam?.id,
+          resolvedAt: activeChallenge.resolvedAt,
+          isResolvableByMe:
+            activeChallenge.status === "open" && activeChallenge.challengerTeamId === myTeam?.id,
+          canCancelByMe:
+            activeChallenge.status === "open" && activeChallenge.challengerTeamId === myTeam?.id,
+          canRateByMe:
+            activeChallenge.status !== "open" &&
+            Boolean(myTeamId) &&
+            !ratingsByChallengeTeam.has(taskRatingKey(activeChallenge.id, myTeamId ?? "")),
+          myRating: myTeamId
+            ? (ratingsByChallengeTeam.get(taskRatingKey(activeChallenge.id, myTeamId))?.stars ?? null)
+            : null,
         }
       : null,
     leaderboard,
@@ -700,18 +784,22 @@ export async function createChallenge(slug: string, authUserId: string, input: u
   }
 
   if (task.type === "cooperative") {
-    if (isCompleted(challengerState.completionTier) || isCompleted(opponentState.completionTier)) {
-      throw new AppError("Cooperative tasks cannot be replayed after completion.");
+    if (challengerState.completionTier === "platinum") {
+      throw new AppError("Your team has already reached diamond on this task.");
+    }
+
+    if (opponentState.completionTier === "platinum") {
+      throw new AppError("That team has already reached diamond on this task.");
     }
   }
 
   if (task.type === "competitive") {
     if (challengerState.completionTier === "platinum") {
-      throw new AppError("Your team has already reached platinum on this task.");
+      throw new AppError("Your team has already reached diamond on this task.");
     }
 
     if (opponentState.completionTier === "platinum") {
-      throw new AppError("That team has already reached platinum on this task.");
+      throw new AppError("That team has already reached diamond on this task.");
     }
   }
 
@@ -766,21 +854,23 @@ export async function resolveChallenge(
       throw new AppError("Only the challenging team can submit the result.", 403);
     }
 
-    if (challenge.type === "competitive") {
-      if (
-        parsed.winnerTeamId !== challenge.challengerTeamId &&
-        parsed.winnerTeamId !== challenge.opponentTeamId
-      ) {
-        throw new AppError("Pick whether your team won or lost.");
-      }
+    const status = parsed.status ?? "resolved";
+
+    if (
+      challenge.type === "competitive" &&
+      status === "resolved" &&
+      parsed.winnerTeamId !== challenge.challengerTeamId &&
+      parsed.winnerTeamId !== challenge.opponentTeamId
+    ) {
+      throw new AppError("Pick whether your team won or lost.");
     }
 
-    const status = challenge.type === "cooperative" ? parsed.status ?? "resolved" : "resolved";
-    if (challenge.type === "competitive" && status !== "resolved") {
-      throw new AppError("Competitive challenges must end in a win or a loss.");
+    if (status === "cancelled" && parsed.winnerTeamId) {
+      throw new AppError("Cancelled challenges cannot have a winner.");
     }
 
-    const winnerTeamId = challenge.type === "competitive" ? parsed.winnerTeamId ?? null : null;
+    const winnerTeamId =
+      challenge.type === "competitive" && status === "resolved" ? parsed.winnerTeamId ?? null : null;
 
     const [updated] = await tx
       .update(challenges)
@@ -788,7 +878,7 @@ export async function resolveChallenge(
         status,
         winnerTeamId,
         note: parsed.note ?? null,
-        resolvedAt: status === "resolved" ? new Date() : null,
+        resolvedAt: new Date(),
       })
       .where(eq(challenges.id, challenge.id))
       .returning();
@@ -799,9 +889,69 @@ export async function resolveChallenge(
   });
 }
 
+export async function rateChallenge(
+  slug: string,
+  authUserId: string,
+  challengeId: string,
+  input: unknown,
+) {
+  const parsed = rateTaskSchema.parse(input);
+  const context = await getPlayerContext(slug, authUserId);
+
+  if (!context.player.teamId) {
+    throw new AppError("You are not on a team yet.");
+  }
+
+  return db.transaction(async (tx) => {
+    const challenge = await tx.query.challenges.findFirst({
+      where: and(eq(challenges.id, challengeId), eq(challenges.gameInstanceId, context.event.id)),
+    });
+
+    if (!challenge) {
+      throw new AppError("Challenge not found.", 404);
+    }
+
+    if (challenge.status === "open") {
+      throw new AppError("Finish or cancel the challenge before rating the task.");
+    }
+
+    if (
+      challenge.challengerTeamId !== context.player.teamId &&
+      challenge.opponentTeamId !== context.player.teamId
+    ) {
+      throw new AppError("Only teams in the challenge can rate this task.", 403);
+    }
+
+    const existingRating = await tx.query.taskRatings.findFirst({
+      where: and(
+        eq(taskRatings.challengeId, challenge.id),
+        eq(taskRatings.teamId, context.player.teamId),
+      ),
+    });
+
+    if (existingRating) {
+      throw new AppError("Your team has already rated this task.");
+    }
+
+    const [rating] = await tx
+      .insert(taskRatings)
+      .values({
+        gameInstanceId: context.event.id,
+        challengeId: challenge.id,
+        taskId: challenge.taskId,
+        teamId: context.player.teamId,
+        stars: parsed.stars,
+      })
+      .returning();
+
+    return rating;
+  });
+}
+
 export async function createTask(slug: string, input: unknown, adminId: string) {
   const parsed = createTaskSchema.parse(input);
   const event = await getEventBySlug(slug);
+  const image = normalizeTaskImage(parsed);
 
   if (event.status === "live" || event.status === "ended") {
     throw new AppError("Tasks can only be added before the game starts.");
@@ -822,6 +972,8 @@ export async function createTask(slug: string, input: unknown, adminId: string) 
       shortDescription: parsed.shortDescription,
       fullDescription: parsed.fullDescription,
       type: parsed.type,
+      imagePath: image.imagePath,
+      imageUrl: image.imageUrl,
       isActive: parsed.isActive,
       sortOrder: existingTasks.length,
     })
@@ -847,6 +999,7 @@ export async function updateTask(
 ) {
   const parsed = createTaskSchema.parse(input);
   const event = await getEventBySlug(slug);
+  const image = normalizeTaskImage(parsed);
   const task = await db.query.tasks.findFirst({
     where: and(eq(tasks.id, taskId), eq(tasks.gameInstanceId, event.id)),
   });
@@ -878,6 +1031,8 @@ export async function updateTask(
           title: parsed.title,
           shortDescription: parsed.shortDescription,
           fullDescription: parsed.fullDescription,
+          imagePath: image.imagePath,
+          imageUrl: image.imageUrl,
           updatedAt: new Date(),
         }
       : {
@@ -885,6 +1040,8 @@ export async function updateTask(
           shortDescription: parsed.shortDescription,
           fullDescription: parsed.fullDescription,
           type: parsed.type,
+          imagePath: image.imagePath,
+          imageUrl: image.imageUrl,
           isActive: parsed.isActive,
           updatedAt: new Date(),
         };
@@ -908,31 +1065,153 @@ export async function updateTask(
   return updated;
 }
 
-export async function startGame(slug: string, adminId: string) {
+export async function createTaskTemplate(slug: string, input: unknown, adminId: string) {
+  const parsed = createTaskTemplateSchema.parse(input);
   const event = await getEventBySlug(slug);
+  const image = normalizeTaskImage(parsed);
 
-  if (event.status !== "registration_open") {
-    throw new AppError("Open registration before starting the game.");
+  const [template] = await db
+    .insert(taskTemplates)
+    .values({
+      title: parsed.title,
+      shortDescription: parsed.shortDescription,
+      fullDescription: parsed.fullDescription,
+      type: parsed.type,
+      imagePath: image.imagePath,
+      imageUrl: image.imageUrl,
+    })
+    .returning();
+
+  await writeAuditLog(db, {
+    adminId,
+    gameInstanceId: event.id,
+    actionType: "create_task_template",
+    entityType: "task_template",
+    entityId: template.id,
+    afterJson: template,
+  });
+
+  return mapTaskTemplate(template);
+}
+
+export async function listTaskTemplates() {
+  const templates = await db.select().from(taskTemplates).orderBy(desc(taskTemplates.updatedAt));
+  return templates.map(mapTaskTemplate);
+}
+
+export async function saveTaskAsTemplate(
+  slug: string,
+  taskId: string,
+  adminId: string,
+  titleOverride?: string,
+) {
+  const event = await getEventBySlug(slug);
+  const task = await db.query.tasks.findFirst({
+    where: and(eq(tasks.id, taskId), eq(tasks.gameInstanceId, event.id)),
+  });
+
+  if (!task) {
+    throw new AppError("Task not found", 404);
   }
 
+  const [template] = await db
+    .insert(taskTemplates)
+    .values({
+      title: titleOverride?.trim() || task.title,
+      shortDescription: task.shortDescription,
+      fullDescription: task.fullDescription,
+      type: task.type,
+      imagePath: task.imagePath,
+      imageUrl: task.imageUrl,
+    })
+    .returning();
+
+  await writeAuditLog(db, {
+    adminId,
+    gameInstanceId: event.id,
+    actionType: "save_task_as_template",
+    entityType: "task_template",
+    entityId: template.id,
+    beforeJson: task,
+    afterJson: template,
+  });
+
+  return mapTaskTemplate(template);
+}
+
+export async function createTaskFromTemplate(slug: string, input: unknown, adminId: string) {
+  const parsed = createTaskFromTemplateSchema.parse(input);
+  const event = await getEventBySlug(slug);
+
+  if (event.status === "live" || event.status === "ended") {
+    throw new AppError("Tasks can only be added before the game starts.");
+  }
+
+  const template = await db.query.taskTemplates.findFirst({
+    where: eq(taskTemplates.id, parsed.templateId),
+  });
+
+  if (!template) {
+    throw new AppError("Task template not found", 404);
+  }
+
+  const existingTasks = await db.select().from(tasks).where(eq(tasks.gameInstanceId, event.id));
+  const activeTaskCount = existingTasks.filter((task) => task.isActive).length;
+
+  if (parsed.isActive && activeTaskCount >= 16) {
+    throw new AppError("Only 16 tasks can be active at a time. Mark another task inactive first.");
+  }
+
+  const [task] = await db
+    .insert(tasks)
+    .values({
+      gameInstanceId: event.id,
+      title: template.title,
+      shortDescription: template.shortDescription,
+      fullDescription: template.fullDescription,
+      type: template.type,
+      imagePath: template.imagePath,
+      imageUrl: template.imageUrl,
+      isActive: parsed.isActive,
+      sortOrder: existingTasks.length,
+    })
+    .returning();
+
+  await writeAuditLog(db, {
+    adminId,
+    gameInstanceId: event.id,
+    actionType: "create_task_from_template",
+    entityType: "task",
+    entityId: task.id,
+    afterJson: { ...task, templateId: template.id },
+  });
+
+  return task;
+}
+
+async function loadLaunchInputs(eventId: string) {
   const [registrations, activeTasks, existingTeams] = await Promise.all([
     db
       .select()
       .from(playerRegistrations)
-      .where(eq(playerRegistrations.gameInstanceId, event.id))
+      .where(eq(playerRegistrations.gameInstanceId, eventId))
       .orderBy(asc(playerRegistrations.createdAt)),
     db
       .select()
       .from(tasks)
-      .where(and(eq(tasks.gameInstanceId, event.id), eq(tasks.isActive, true)))
+      .where(and(eq(tasks.gameInstanceId, eventId), eq(tasks.isActive, true)))
       .orderBy(asc(tasks.sortOrder)),
-    db.select().from(teams).where(eq(teams.gameInstanceId, event.id)),
+    db.select().from(teams).where(eq(teams.gameInstanceId, eventId)),
   ]);
 
-  if (existingTeams.length > 0) {
-    throw new AppError("This event has already been started.");
-  }
+  return { registrations, activeTasks, existingTeams };
+}
 
+function validateLaunchInputs(
+  event: Awaited<ReturnType<typeof getEventBySlug>>,
+  registrations: PlayerRegistrationRecord[],
+  activeTasks: TaskRecord[],
+) {
   if (registrations.length < 2) {
     throw new AppError("At least 2 players are required to start the game.");
   }
@@ -944,90 +1223,155 @@ export async function startGame(slug: string, adminId: string) {
   if (activeTasks.length !== 16) {
     throw new AppError("Exactly 16 active tasks are required before the game can start.");
   }
+}
 
-  return db.transaction(async (tx) => {
-    const teamPlan = generateTeamPlan(
-      registrations.map((player) => ({
-        id: player.id,
-        displayName: player.displayName,
-      })),
-      event.targetTeamSize,
-      event.seed,
-    );
+async function launchLiveGame(
+  executor: any,
+  event: Awaited<ReturnType<typeof getEventBySlug>>,
+  registrations: PlayerRegistrationRecord[],
+  activeTasks: TaskRecord[],
+) {
+  const teamPlan = generateTeamPlan(
+    registrations.map((player) => ({
+      id: player.id,
+      displayName: player.displayName,
+    })),
+    event.targetTeamSize,
+    event.seed,
+  );
 
-    const createdTeams: TeamRecord[] = [];
+  const createdTeams: TeamRecord[] = [];
 
-    for (const plannedTeam of teamPlan) {
-      const [team] = await tx
-        .insert(teams)
-        .values({
-          gameInstanceId: event.id,
-          autoName: plannedTeam.autoName,
-        })
-        .returning();
+  for (const plannedTeam of teamPlan) {
+    const [team] = await executor
+      .insert(teams)
+      .values({
+        gameInstanceId: event.id,
+        autoName: plannedTeam.autoName,
+      })
+      .returning();
 
-      createdTeams.push(team);
-    }
+    createdTeams.push(team);
+  }
 
-    for (const [index, plannedTeam] of teamPlan.entries()) {
-      const team = createdTeams[index];
+  for (const [index, plannedTeam] of teamPlan.entries()) {
+    const team = createdTeams[index];
 
-      await tx
-        .update(playerRegistrations)
-        .set({
-          teamId: team.id,
-          isCaptain: false,
-        })
-        .where(inArray(playerRegistrations.id, plannedTeam.playerIds));
-
-      await tx
-        .update(playerRegistrations)
-        .set({
-          isCaptain: true,
-        })
-        .where(eq(playerRegistrations.id, plannedTeam.captainPlayerId));
-
-      await tx
-        .update(teams)
-        .set({
-          captainPlayerId: plannedTeam.captainPlayerId,
-          updatedAt: new Date(),
-        })
-        .where(eq(teams.id, team.id));
-    }
-
-    const assignments = generateBoardAssignments(
-      createdTeams.map((team) => team.id),
-      activeTasks.map((task) => task.id),
-      event.seed,
-    );
-
-    await tx.insert(teamTaskStates).values(
-      assignments.map((assignment) => ({
-        teamId: assignment.teamId,
-        taskId: assignment.taskId,
-        boardPosition: assignment.boardPosition,
-        completionTier: "none" as const,
-        completionSource: "none" as const,
-        winCount: 0,
-        lossCount: 0,
-      })),
-    );
-
-    const [updatedEvent] = await tx
-      .update(gameInstances)
+    await executor
+      .update(playerRegistrations)
       .set({
-        status: "live",
-        startedAt: new Date(),
+        teamId: team.id,
+        isCaptain: false,
+      })
+      .where(inArray(playerRegistrations.id, plannedTeam.playerIds));
+
+    await executor
+      .update(playerRegistrations)
+      .set({
+        isCaptain: true,
+      })
+      .where(eq(playerRegistrations.id, plannedTeam.captainPlayerId));
+
+    await executor
+      .update(teams)
+      .set({
+        captainPlayerId: plannedTeam.captainPlayerId,
         updatedAt: new Date(),
       })
-      .where(eq(gameInstances.id, event.id))
-      .returning();
+      .where(eq(teams.id, team.id));
+  }
+
+  const assignments = generateBoardAssignments(
+    createdTeams.map((team) => team.id),
+    activeTasks.map((task) => task.id),
+    event.seed,
+  );
+
+  await executor.insert(teamTaskStates).values(
+    assignments.map((assignment) => ({
+      teamId: assignment.teamId,
+      taskId: assignment.taskId,
+      boardPosition: assignment.boardPosition,
+      completionTier: "none" as const,
+      completionSource: "none" as const,
+      winCount: 0,
+      lossCount: 0,
+    })),
+  );
+
+  const [updatedEvent] = await executor
+    .update(gameInstances)
+    .set({
+      status: "live",
+      startedAt: new Date(),
+      endedAt: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(gameInstances.id, event.id))
+    .returning();
+
+  return updatedEvent;
+}
+
+export async function startGame(slug: string, adminId: string) {
+  const event = await getEventBySlug(slug);
+
+  if (event.status !== "registration_open") {
+    throw new AppError("Open registration before starting the game.");
+  }
+
+  const { registrations, activeTasks, existingTeams } = await loadLaunchInputs(event.id);
+
+  if (existingTeams.length > 0) {
+    throw new AppError("This event has already been started.");
+  }
+
+  validateLaunchInputs(event, registrations, activeTasks);
+
+  return db.transaction(async (tx) => {
+    const updatedEvent = await launchLiveGame(tx, event, registrations, activeTasks);
 
     await writeAuditLog(tx, {
       adminId,
       gameInstanceId: event.id,
       actionType: "start_game",
+      entityType: "game_instance",
+      entityId: event.id,
+      beforeJson: event,
+      afterJson: updatedEvent,
+    });
+
+    return updatedEvent;
+  });
+}
+
+export async function restartGame(slug: string, adminId: string) {
+  const event = await getEventBySlug(slug);
+
+  if (event.status !== "live" && event.status !== "ended") {
+    throw new AppError("Only live or ended events can be restarted.");
+  }
+
+  const { registrations, activeTasks } = await loadLaunchInputs(event.id);
+  validateLaunchInputs(event, registrations, activeTasks);
+
+  return db.transaction(async (tx) => {
+    await tx
+      .update(playerRegistrations)
+      .set({
+        teamId: null,
+        isCaptain: false,
+      })
+      .where(eq(playerRegistrations.gameInstanceId, event.id));
+
+    await tx.delete(teams).where(eq(teams.gameInstanceId, event.id));
+
+    const updatedEvent = await launchLiveGame(tx, event, registrations, activeTasks);
+
+    await writeAuditLog(tx, {
+      adminId,
+      gameInstanceId: event.id,
+      actionType: "restart_game",
       entityType: "game_instance",
       entityId: event.id,
       beforeJson: event,
@@ -1225,7 +1569,8 @@ export async function endGame(slug: string, adminId: string) {
 
 export async function getAdminEventState(slug: string) {
   const event = await getEventBySlug(slug);
-  const [eventTeams, registrations, eventTasks, eventChallenges, auditRows] = await Promise.all([
+  const [eventTeams, registrations, eventTasks, eventChallenges, eventRatings, auditRows, templates] =
+    await Promise.all([
     db.select().from(teams).where(eq(teams.gameInstanceId, event.id)).orderBy(asc(teams.createdAt)),
     db
       .select()
@@ -1234,12 +1579,14 @@ export async function getAdminEventState(slug: string) {
       .orderBy(asc(playerRegistrations.createdAt)),
     db.select().from(tasks).where(eq(tasks.gameInstanceId, event.id)).orderBy(asc(tasks.sortOrder)),
     db.select().from(challenges).where(eq(challenges.gameInstanceId, event.id)).orderBy(desc(challenges.createdAt)),
+    db.select().from(taskRatings).where(eq(taskRatings.gameInstanceId, event.id)),
     db
       .select()
       .from(adminAuditLogs)
       .where(eq(adminAuditLogs.gameInstanceId, event.id))
-      .orderBy(desc(adminAuditLogs.createdAt)),
-  ]);
+        .orderBy(desc(adminAuditLogs.createdAt)),
+      listTaskTemplates(),
+    ]);
 
   const teamIds = eventTeams.map((team) => team.id);
   const stateRows =
@@ -1259,11 +1606,17 @@ export async function getAdminEventState(slug: string) {
   });
 
   const taskById = new Map(eventTasks.map((task) => [task.id, task]));
+  const taskRatingSummary = buildTaskRatingSummary(eventRatings);
 
   return {
     event,
     registrations,
-    tasks: eventTasks,
+    tasks: eventTasks.map((task) => ({
+      ...task,
+      ratingAverage: taskRatingSummary.get(task.id)?.ratingAverage ?? null,
+      ratingCount: taskRatingSummary.get(task.id)?.ratingCount ?? 0,
+    })),
+    templates,
     leaderboard: buildLeaderboard({
       teams: eventTeams.map((team) => ({
         id: team.id,

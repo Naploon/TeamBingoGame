@@ -211,6 +211,51 @@ describe("game engine", () => {
     expect(leaderboard[1]).toMatchObject({ teamName: "Beta", completedCount: 1 });
   });
 
+  it("lets cooperative tasks level up to diamond through repeat completions", () => {
+    const assignments = generateBoardAssignments(["team-a", "team-b"], ["task-1"], 202);
+
+    const states = recomputeTeamTaskStates({
+      assignments,
+      tasks: [{ id: "task-1", type: "cooperative" }],
+      challenges: [
+        {
+          id: "challenge-1",
+          taskId: "task-1",
+          challengerTeamId: "team-a",
+          opponentTeamId: "team-b",
+          type: "cooperative",
+          status: "resolved",
+          winnerTeamId: null,
+          createdAt: "2026-03-15T10:00:00.000Z",
+        },
+        {
+          id: "challenge-2",
+          taskId: "task-1",
+          challengerTeamId: "team-a",
+          opponentTeamId: "team-b",
+          type: "cooperative",
+          status: "resolved",
+          winnerTeamId: null,
+          createdAt: "2026-03-15T10:05:00.000Z",
+        },
+        {
+          id: "challenge-3",
+          taskId: "task-1",
+          challengerTeamId: "team-a",
+          opponentTeamId: "team-b",
+          type: "cooperative",
+          status: "resolved",
+          winnerTeamId: null,
+          createdAt: "2026-03-15T10:10:00.000Z",
+        },
+      ],
+    });
+
+    expect(states.every((state) => state.winCount === 3)).toBe(true);
+    expect(states.every((state) => state.completionTier === "platinum")).toBe(true);
+    expect(states.every((state) => state.completionSource === "cooperative")).toBe(true);
+  });
+
   it("caps competitive wins at platinum", () => {
     const assignments = generateBoardAssignments(["team-a", "team-b"], ["task-1"], 55);
 

@@ -4,6 +4,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  real,
   text,
   timestamp,
   uniqueIndex,
@@ -125,6 +126,18 @@ export const playerSessions = pgTable(
   }),
 );
 
+export const taskTemplates = pgTable("task_templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  title: text("title").notNull(),
+  shortDescription: text("short_description").notNull(),
+  fullDescription: text("full_description").notNull(),
+  type: taskTypeEnum("type").notNull(),
+  imagePath: text("image_path"),
+  imageUrl: text("image_url"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const tasks = pgTable("tasks", {
   id: uuid("id").defaultRandom().primaryKey(),
   gameInstanceId: uuid("game_instance_id")
@@ -134,6 +147,8 @@ export const tasks = pgTable("tasks", {
   shortDescription: text("short_description").notNull(),
   fullDescription: text("full_description").notNull(),
   type: taskTypeEnum("type").notNull(),
+  imagePath: text("image_path"),
+  imageUrl: text("image_url"),
   isActive: boolean("is_active").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -188,6 +203,33 @@ export const challenges = pgTable("challenges", {
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
 });
 
+export const taskRatings = pgTable(
+  "task_ratings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    gameInstanceId: uuid("game_instance_id")
+      .notNull()
+      .references(() => gameInstances.id, { onDelete: "cascade" }),
+    challengeId: uuid("challenge_id")
+      .notNull()
+      .references(() => challenges.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    stars: real("stars").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    uniqueChallengeTeamIdx: uniqueIndex("task_ratings_challenge_team_idx").on(
+      table.challengeId,
+      table.teamId,
+    ),
+  }),
+);
+
 export const adminAuditLogs = pgTable("admin_audit_logs", {
   id: uuid("id").defaultRandom().primaryKey(),
   adminId: text("admin_id").notNull(),
@@ -206,6 +248,8 @@ export type GameInstanceRecord = typeof gameInstances.$inferSelect;
 export type TeamRecord = typeof teams.$inferSelect;
 export type PlayerRegistrationRecord = typeof playerRegistrations.$inferSelect;
 export type PlayerSessionRecord = typeof playerSessions.$inferSelect;
+export type TaskTemplateRecord = typeof taskTemplates.$inferSelect;
 export type TaskRecord = typeof tasks.$inferSelect;
 export type TeamTaskStateRecord = typeof teamTaskStates.$inferSelect;
 export type ChallengeRecord = typeof challenges.$inferSelect;
+export type TaskRatingRecord = typeof taskRatings.$inferSelect;
