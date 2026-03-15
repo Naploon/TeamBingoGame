@@ -79,6 +79,34 @@ npm run dev
 - Export event data before and after each real event if you stay on Supabase Free.
 - Run one dry-run event on actual phones before using the app for a live audience.
 
+## Release checklist
+
+Use this before pushing a production change.
+
+1. Confirm you are on Node 20 with `node -v`.
+2. Install dependencies if needed with `npm install`.
+3. Run `npm test`.
+4. Run `npm run build`.
+5. If DB schema or env loading changed, run `npm run db:push` against the intended environment.
+6. Check that Vercel env vars are present:
+   - `DATABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`
+   - `SESSION_SECRET`
+   - `ADMIN_ALLOWLIST`
+   - `NEXT_PUBLIC_APP_URL`
+7. Check that Supabase Auth is still configured with:
+   - Site URL `https://team-bingo-game.vercel.app`
+   - Redirect URLs for both `https://team-bingo-game.vercel.app/**` and `http://localhost:3000/**`
+8. Push to `main` and wait for the Vercel production deployment to finish.
+9. Smoke-test production:
+   - home page loads
+   - `/admin/login` loads
+   - admin magic link login works
+   - one player can join an event
+
+For deeper deployment troubleshooting, see [`docs/deployment-runbook.md`](./docs/deployment-runbook.md).
+
 ## Test commands
 
 ```bash
