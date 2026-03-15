@@ -24,27 +24,28 @@ Mobile-first team bingo challenge app built with Next.js, Tailwind, Drizzle ORM,
 
 ## Local setup
 
-1. Copy `.env.example` to `.env.local`.
-2. Fill in Supabase URL, publishable key, service role key, database URL, app URL, session secret, and admin allowlist.
-3. Install dependencies:
+1. Use Node 20.x. The repo now pins this in `.nvmrc`, `.node-version`, and `package.json`.
+2. Copy `.env.example` to `.env.local`.
+3. Fill in Supabase URL, publishable key, service role key, database URL, app URL, session secret, and admin allowlist.
+4. Install dependencies:
 
 ```bash
 npm install
 ```
 
-4. Push the schema to your database:
+5. Push the schema to your database:
 
 ```bash
 npm run db:push
 ```
 
-5. Start the app:
+6. Start the app:
 
 ```bash
 npm run dev
 ```
 
-6. Open [http://localhost:3000](http://localhost:3000).
+7. Open [http://localhost:3000](http://localhost:3000).
 
 ## Supabase auth setup
 
@@ -59,9 +60,10 @@ npm run dev
 ### Vercel
 
 1. Create a Vercel project from this repo.
-2. Add all environment variables from `.env.example`.
-3. Set the production URL in `NEXT_PUBLIC_APP_URL`.
-4. Deploy `main` to production and use preview deployments for staging checks.
+2. Vercel will pick up Node 20 from `package.json`.
+3. Add all environment variables from `.env.example`.
+4. Set the production URL in `NEXT_PUBLIC_APP_URL`.
+5. Deploy `main` to production and use preview deployments for staging checks.
 
 ### Supabase
 
