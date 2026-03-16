@@ -14,10 +14,7 @@ html {
   min-height: 100%;
   width: 100%;
   overflow-x: hidden;
-  background:
-    radial-gradient(circle at top left, rgba(238, 108, 77, 0.18), transparent 30%),
-    radial-gradient(circle at bottom right, rgba(47, 102, 144, 0.18), transparent 34%),
-    #f6f1e8;
+  background: #f6f1e8;
 }
 
 body {
@@ -26,6 +23,8 @@ body {
   width: 100%;
   margin: 0;
   overflow-x: hidden;
+  position: relative;
+  background: #f6f1e8;
   color: #10212f;
   font-family:
     "Avenir Next",
@@ -34,6 +33,19 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at top left, rgba(238, 108, 77, 0.18), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(47, 102, 144, 0.18), transparent 34%),
+    #f6f1e8;
+  background-repeat: no-repeat;
+  pointer-events: none;
 }
 
 body[data-scroll-locked="true"] {

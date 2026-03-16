@@ -18,7 +18,7 @@ export function AppSurface({
   return (
     <main
       className={cn(
-        "mx-auto min-h-[100dvh] w-full max-w-6xl overflow-x-clip px-4 pb-[calc(env(safe-area-inset-bottom)+6rem)] pt-[max(env(safe-area-inset-top),1.25rem)] sm:px-6 sm:pt-6 lg:px-8",
+        "mx-auto min-h-[100dvh] w-full max-w-6xl overflow-x-clip px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-[max(env(safe-area-inset-top),1.25rem)] sm:px-6 sm:pt-6 lg:px-8",
         className,
       )}
     >
