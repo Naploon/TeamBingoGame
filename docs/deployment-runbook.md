@@ -3,7 +3,7 @@
 ## Current setup
 - Framework: Next.js 14 on Vercel
 - Database/Auth: Supabase
-- Production URL: `https://team-bingo-game.vercel.app`
+- Production URL: `https://karlisynnam2ng.vercel.app`
 - Local runtime target: Node 20
 
 ## Files that matter
@@ -39,7 +39,7 @@
 ## Supabase checklist
 - Auth Site URL should include production domain
 - Redirect URLs should include:
-  - `https://team-bingo-game.vercel.app/**`
+  - `https://karlisynnam2ng.vercel.app/**`
   - `http://localhost:3000/**`
 - For production, prefer Transaction Pooler URI over direct Postgres URI
 

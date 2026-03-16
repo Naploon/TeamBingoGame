@@ -6,8 +6,8 @@
 
 ## Deployment facts
 - GitHub repo: `https://github.com/Naploon/TeamBingoGame.git`
-- Vercel project name: `team-bingo-game`
-- Vercel production alias: `https://team-bingo-game.vercel.app`
+- Vercel project name: `karlisynnam2ng`
+- Vercel production alias: `https://karlisynnam2ng.vercel.app`
 - Vercel scope used during setup: `karl7899-7240s-projects`
 - Supabase project values are configured in local and Vercel environment variables; do not hardcode them into tracked files.
 - Admin allowlist values are environment-specific and must stay out of tracked docs/examples.
@@ -34,7 +34,7 @@
 - Local DB tooling relies on `drizzle.config.ts` loading `.env.local`.
 - For Vercel production, prefer the Supabase Transaction Pooler connection string for `DATABASE_URL`.
 - Keep Supabase Auth Site URL and redirect URLs aligned with:
-  - `https://team-bingo-game.vercel.app`
+  - `https://karlisynnam2ng.vercel.app`
   - `http://localhost:3000`
 
 ## Post-deploy smoke checks

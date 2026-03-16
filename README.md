@@ -71,7 +71,7 @@ npm run dev
 2. Copy the Postgres connection string into `DATABASE_URL`.
 3. Run `npm run db:push` against each project.
 4. Seed organizer emails in `ADMIN_ALLOWLIST`.
-5. If you use the default Vercel project naming, the clean production hostname to aim for is `team-bingo-game.vercel.app`.
+5. If you use the default Vercel project naming, the clean production hostname to aim for is `karlisynnam2ng.vercel.app`.
 
 ## Operational notes
 
@@ -96,8 +96,8 @@ Use this before pushing a production change.
    - `ADMIN_ALLOWLIST`
    - `NEXT_PUBLIC_APP_URL`
 7. Check that Supabase Auth is still configured with:
-   - Site URL `https://team-bingo-game.vercel.app`
-   - Redirect URLs for both `https://team-bingo-game.vercel.app/**` and `http://localhost:3000/**`
+   - Site URL `https://karlisynnam2ng.vercel.app`
+   - Redirect URLs for both `https://karlisynnam2ng.vercel.app/**` and `http://localhost:3000/**`
 8. Push to `main` and wait for the Vercel production deployment to finish.
 9. Smoke-test production:
    - home page loads
