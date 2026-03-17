@@ -14,10 +14,6 @@ type PlayerState = Awaited<ReturnType<typeof getPlayerState>>;
 type PlayerView = PlayerViewId;
 type HistoryFilter = "all" | "wins" | "losses" | "co-op";
 type TaskSheetMode = "details" | "challenge" | "result" | "rating";
-type InstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
 
 const STAR_PATH =
   "M12 1.75l3.14 6.35 7.01 1.02-5.08 4.95 1.2 6.98L12 17.74 5.73 21.05l1.2-6.98-5.08-4.95 7.01-1.02L12 1.75Z";
@@ -488,8 +484,6 @@ export function PlayerApp({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [showInstallHint, setShowInstallHint] = useState(false);
-  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [birthdayMode, setBirthdayMode] = useState(false);
   const [birthdayModeReady, setBirthdayModeReady] = useState(false);
 
@@ -530,17 +524,11 @@ export function PlayerApp({
       }
     });
   const birthdayModeStorageKey = `player-birthday-mode:${slug}`;
-  const birthdayShellClass = birthdayMode
-    ? "rounded-[2rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(253,242,248,0.88)_18%,rgba(254,249,195,0.9)_42%,rgba(224,231,255,0.88)_66%,rgba(236,72,153,0.08)_100%)] p-3 shadow-[0_24px_70px_rgba(236,72,153,0.14)] md:p-4"
-    : "";
   const birthdayHeroPanelClass = birthdayMode
-    ? "border-fuchsia-300/55 bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(254,240,138,0.82),rgba(249,168,212,0.78),rgba(125,211,252,0.78))] shadow-[0_18px_44px_rgba(236,72,153,0.24)]"
+    ? "border-fuchsia-300/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(254,240,138,0.9),rgba(249,168,212,0.86),rgba(125,211,252,0.84))] shadow-[0_20px_48px_rgba(236,72,153,0.24)]"
     : "bg-gradient-to-br from-white via-white to-sand/50";
   const birthdayAccentPanelClass = birthdayMode
-    ? "border-fuchsia-300/55 bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(253,242,248,0.94),rgba(254,249,195,0.86),rgba(224,231,255,0.84))] shadow-[0_16px_34px_rgba(236,72,153,0.14)]"
-    : "";
-  const birthdaySoftPanelClass = birthdayMode
-    ? "border-orange-200/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(254,249,195,0.82),rgba(255,237,213,0.78))] shadow-[0_14px_30px_rgba(249,115,22,0.12)]"
+    ? "border-fuchsia-300/65 bg-[linear-gradient(135deg,rgba(255,255,255,0.95),rgba(253,242,248,0.94),rgba(254,249,195,0.9),rgba(224,231,255,0.88),rgba(254,205,211,0.82))] shadow-[0_16px_38px_rgba(236,72,153,0.16)]"
     : "";
 
   async function readResponse(response: Response, fallbackMessage: string) {
@@ -707,36 +695,6 @@ export function PlayerApp({
       return;
     }
 
-    const installHintKey = `player-install-hint:${slug}`;
-    const standalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
-
-    if (standalone || window.localStorage.getItem(installHintKey) === "dismissed") {
-      setShowInstallHint(false);
-      return;
-    }
-
-    setShowInstallHint(true);
-  }, [slug, state.event.status]);
-
-  useEffect(() => {
-    function handleBeforeInstallPrompt(event: Event) {
-      event.preventDefault();
-      setInstallPrompt(event as InstallPromptEvent);
-    }
-
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
     setBirthdayMode(window.localStorage.getItem(birthdayModeStorageKey) === "on");
     setBirthdayModeReady(true);
   }, [birthdayModeStorageKey]);
@@ -749,25 +707,26 @@ export function PlayerApp({
     window.localStorage.setItem(birthdayModeStorageKey, birthdayMode ? "on" : "off");
   }, [birthdayMode, birthdayModeReady, birthdayModeStorageKey]);
 
-  function toggleBirthdayMode() {
-    setBirthdayMode((current) => !current);
-  }
+  useEffect(() => {
+    const body = document.body;
+    const html = document.documentElement;
 
-  async function dismissInstallHint() {
-    window.localStorage.setItem(`player-install-hint:${slug}`, "dismissed");
-    setShowInstallHint(false);
-  }
-
-  async function handleInstallPrompt() {
-    if (!installPrompt) {
-      dismissInstallHint();
-      return;
+    if (birthdayMode) {
+      body.dataset.playerTheme = "birthday";
+      html.dataset.playerTheme = "birthday";
+    } else {
+      delete body.dataset.playerTheme;
+      delete html.dataset.playerTheme;
     }
 
-    await installPrompt.prompt();
-    await installPrompt.userChoice;
-    setInstallPrompt(null);
-    dismissInstallHint();
+    return () => {
+      delete body.dataset.playerTheme;
+      delete html.dataset.playerTheme;
+    };
+  }, [birthdayMode]);
+
+  function toggleBirthdayMode() {
+    setBirthdayMode((current) => !current);
   }
 
   async function handleRenameTeam(event: FormEvent<HTMLFormElement>) {
@@ -1309,13 +1268,13 @@ export function PlayerApp({
   }
 
   return (
-    <div className={cn("relative isolate space-y-5 pb-24 md:pb-0", birthdayShellClass)}>
+    <div className="relative isolate space-y-5 pb-24 md:pb-0">
       {birthdayMode ? (
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[2rem]">
-          <div className="absolute -left-10 top-8 h-40 w-40 rounded-full bg-fuchsia-300/35 blur-3xl" />
-          <div className="absolute right-0 top-20 h-44 w-44 rounded-full bg-amber-300/30 blur-3xl" />
-          <div className="absolute bottom-16 left-12 h-40 w-40 rounded-full bg-cyan-300/30 blur-3xl" />
-          <div className="absolute bottom-0 right-8 h-44 w-44 rounded-full bg-rose-300/30 blur-3xl" />
+        <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+          <div className="absolute -left-16 top-4 h-52 w-52 rounded-full bg-fuchsia-400/35 blur-3xl" />
+          <div className="absolute right-0 top-16 h-60 w-60 rounded-full bg-amber-300/35 blur-3xl" />
+          <div className="absolute bottom-14 left-10 h-52 w-52 rounded-full bg-cyan-300/30 blur-3xl" />
+          <div className="absolute bottom-0 right-10 h-56 w-56 rounded-full bg-rose-300/30 blur-3xl" />
           {BIRTHDAY_CONFETTI_PIECES.map((piece, index) => (
             <span key={index} className={cn("absolute", piece)} />
           ))}
@@ -1401,28 +1360,6 @@ export function PlayerApp({
 
       {message ? <p className="rounded-2xl bg-mint/15 px-4 py-3 text-sm text-ink">{message}</p> : null}
       {error ? <p className="rounded-2xl bg-coral/15 px-4 py-3 text-sm text-coral">{error}</p> : null}
-
-      {showInstallHint ? (
-        <Panel className={cn("border-sea/20 bg-sea/8", birthdaySoftPanelClass)}>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-sea/80">Add to Home Screen</p>
-              <p className="mt-2 text-sm text-ink/70">
-                Save the game to your phone for faster re-entry and a cleaner full-screen player view.
-                {!installPrompt ? " On iPhone, tap Share and choose Add to Home Screen." : ""}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Button tone="secondary" onClick={handleInstallPrompt}>
-                {installPrompt ? "Install app" : "Got it"}
-              </Button>
-              <Button tone="ghost" onClick={dismissInstallHint}>
-                Dismiss
-              </Button>
-            </div>
-          </div>
-        </Panel>
-      ) : null}
 
       <Panel
         className={cn(
