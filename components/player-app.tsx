@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 
 type PlayerState = Awaited<ReturnType<typeof getPlayerState>>;
 type PlayerView = PlayerViewId;
-type HistoryFilter = "all" | "active" | "wins" | "losses" | "co-op";
+type HistoryFilter = "all" | "wins" | "losses" | "co-op";
 type TaskSheetMode = "details" | "challenge" | "result" | "rating";
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -46,13 +46,6 @@ function formatTierLabel(tier: string) {
 
 function formatStars(value: number) {
   return Number.isInteger(value) ? `${value}` : value.toFixed(1);
-}
-
-function formatUpdatedAt(value: string) {
-  return new Date(value).toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function progressPillClasses(kind: "rank" | "win" | "loss", value?: string) {
@@ -112,7 +105,7 @@ function getPlayerViewLabel(view: PlayerView) {
 
 function getAvailableViews(state: PlayerState): PlayerView[] {
   if (state.event.status === "ended") {
-    return state.team ? ["recap", "leaderboard", "history", "team"] : ["recap", "leaderboard"];
+    return state.team ? ["recap", "board", "leaderboard", "history", "team"] : ["recap", "leaderboard"];
   }
 
   if (state.event.status === "live" && state.team) {
@@ -263,9 +256,11 @@ function MiniStat({
   detail?: string;
 }) {
   return (
-    <div className="rounded-3xl bg-white/80 p-4 shadow-sm">
+    <div className="min-w-0 rounded-3xl bg-white/80 p-4 shadow-sm">
       <p className="text-[11px] uppercase tracking-[0.22em] text-ink/45">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-ink">{value}</p>
+      <p className="mt-2 break-words text-xl font-semibold leading-tight text-ink [overflow-wrap:anywhere] sm:text-2xl">
+        {value}
+      </p>
       {detail ? <p className="mt-2 text-sm leading-6 text-ink/60">{detail}</p> : null}
     </div>
   );
@@ -310,13 +305,13 @@ function MobileBottomNav({
 }) {
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/60 bg-mist/95 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-12px_35px_rgba(16,33,47,0.08)] backdrop-blur md:hidden">
-      <div className="mx-auto grid max-w-6xl grid-cols-4 gap-2">
-        {availableViews.slice(0, 4).map((tab) => (
+      <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto pb-1">
+        {availableViews.map((tab) => (
           <button
             key={tab}
             type="button"
             className={cn(
-              "rounded-2xl px-2 py-3 text-center text-xs font-semibold uppercase tracking-[0.18em] transition",
+              "min-w-[5rem] shrink-0 rounded-2xl px-3 py-3 text-center text-xs font-semibold uppercase tracking-[0.18em] transition",
               view === tab ? "bg-ink text-white" : "bg-white/80 text-ink/65",
             )}
             onClick={() => onSelect(tab)}
@@ -348,7 +343,6 @@ export function PlayerApp({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [showInstallHint, setShowInstallHint] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
 
@@ -374,20 +368,20 @@ export function PlayerApp({
         : ["details"];
   const selectedOpponent =
     selectedTask?.opponentOptions.find((team) => team.teamId === opponentTeamId) ?? null;
-  const historyItems = state.matchHistory.filter((match) => {
-    switch (historyFilter) {
-      case "active":
-        return match.result === "in_progress";
-      case "wins":
-        return match.result === "win" || match.result === "completed";
-      case "losses":
-        return match.result === "loss" || match.result === "failed";
-      case "co-op":
-        return match.taskType === "cooperative";
-      default:
-        return true;
-    }
-  });
+  const historyItems = state.matchHistory
+    .filter((match) => match.result !== "in_progress")
+    .filter((match) => {
+      switch (historyFilter) {
+        case "wins":
+          return match.result === "win" || match.result === "completed";
+        case "losses":
+          return match.result === "loss" || match.result === "failed";
+        case "co-op":
+          return match.taskType === "cooperative";
+        default:
+          return true;
+      }
+    });
 
   async function readResponse(response: Response, fallbackMessage: string) {
     const payload = await response.json();
@@ -410,14 +404,7 @@ export function PlayerApp({
     }
   }
 
-  async function refreshNow(options?: { silent?: boolean; announce?: boolean }) {
-    const silent = options?.silent ?? false;
-
-    if (!silent) {
-      setIsRefreshing(true);
-      setError(null);
-    }
-
+  async function refreshNow() {
     try {
       const response = await fetch(`/api/play/${slug}/state`, {
         method: "GET",
@@ -425,19 +412,9 @@ export function PlayerApp({
       });
       const payload = await readResponse(response, "Could not refresh state.");
       applyState(payload);
-
-      if (options?.announce) {
-        setMessage(`Updated at ${formatUpdatedAt(payload.refreshedAt)}.`);
-      }
     } catch (refreshError) {
-      if (!silent) {
-        setError(refreshError instanceof Error ? refreshError.message : "Refresh failed.");
-      }
+      setError(refreshError instanceof Error ? refreshError.message : "Refresh failed.");
       throw refreshError;
-    } finally {
-      if (!silent) {
-        setIsRefreshing(false);
-      }
     }
   }
 
@@ -629,7 +606,7 @@ export function PlayerApp({
       await readResponse(response, "Rename failed.");
 
       setMessage("Team name updated.");
-      await refreshNow({ silent: true });
+      await refreshNow();
     } catch (renameError) {
       setError(renameError instanceof Error ? renameError.message : "Rename failed.");
     } finally {
@@ -660,7 +637,7 @@ export function PlayerApp({
       await readResponse(response, "Challenge creation failed.");
 
       setMessage("Challenge created. Complete the task, then submit the result.");
-      await refreshNow({ silent: true });
+      await refreshNow();
     } catch (challengeError) {
       setError(challengeError instanceof Error ? challengeError.message : "Challenge failed.");
     } finally {
@@ -703,7 +680,7 @@ export function PlayerApp({
       );
       setNote("");
       setRatingStars(0);
-      await refreshNow({ silent: true });
+      await refreshNow();
     } catch (resolveError) {
       setError(resolveError instanceof Error ? resolveError.message : "Submission failed.");
     } finally {
@@ -736,7 +713,7 @@ export function PlayerApp({
       setSelectedTaskId(null);
       setRatingStars(0);
       setNote("");
-      await refreshNow({ silent: true });
+      await refreshNow();
     } catch (ratingError) {
       setError(ratingError instanceof Error ? ratingError.message : "Rating failed.");
     } finally {
@@ -761,14 +738,20 @@ export function PlayerApp({
   }
 
   function renderBoardView() {
+    const boardIsReadOnly = state.event.status === "ended";
+
     return (
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-ink/45">Task board</p>
-            <h3 className="mt-2 text-xl font-semibold text-ink">Choose the next challenge</h3>
+            <h3 className="mt-2 text-xl font-semibold text-ink">
+              {boardIsReadOnly ? "Your final board" : "Choose the next challenge"}
+            </h3>
             <p className="mt-2 text-sm text-ink/65">
-              Tap any card to compare opponents, read the full task, or continue the active challenge.
+              {boardIsReadOnly
+                ? "The game is finished, so tasks are view-only now. Open any card to remember what it was about and see how far your team got."
+                : "Tap any card to compare opponents, read the full task, or continue the active challenge."}
             </p>
           </div>
           <Badge tone="default">{state.board.length} cards</Badge>
@@ -821,13 +804,15 @@ export function PlayerApp({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-ink/45">Match history</p>
-            <h3 className="mt-2 text-xl font-semibold text-ink">Tasks your team has played</h3>
-            <p className="mt-2 text-sm text-ink/65">Filter the stream to see what happened fast on a phone screen.</p>
+            <h3 className="mt-2 text-xl font-semibold text-ink">Finished tasks your team has played</h3>
+            <p className="mt-2 text-sm text-ink/65">
+              Filter the resolved matches to scan wins, losses, and co-op attempts quickly on a phone screen.
+            </p>
           </div>
           <Badge tone="default">{state.matchHistory.length} matches</Badge>
         </div>
         <div className="flex flex-wrap gap-2">
-          {(["all", "active", "wins", "losses", "co-op"] as HistoryFilter[]).map((filter) => (
+          {(["all", "wins", "losses", "co-op"] as HistoryFilter[]).map((filter) => (
             <button
               key={filter}
               type="button"
@@ -1005,8 +990,8 @@ export function PlayerApp({
                 >
                   <p className="text-xs uppercase tracking-[0.22em] text-white/55">#{index + 1}</p>
                   <div className="mt-2 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-lg font-semibold">{team.teamName}</p>
+                    <div className="min-w-0">
+                      <p className="break-words text-lg font-semibold [overflow-wrap:anywhere]">{team.teamName}</p>
                       <p className="mt-1 text-sm text-white/70">
                         Gold {team.goldCount} · Diamond {team.platinumCount}
                       </p>
@@ -1019,7 +1004,7 @@ export function PlayerApp({
           </div>
           <div className="rounded-3xl bg-white/80 p-5 shadow-sm">
             <p className="text-xs uppercase tracking-[0.24em] text-ink/45">Share card</p>
-            <h3 className="mt-2 text-xl font-semibold text-ink">
+            <h3 className="mt-2 break-words text-xl font-semibold text-ink [overflow-wrap:anywhere]">
               {state.teamRecap ? `${state.teamRecap.teamName} finished #${state.teamRecap.finalRank ?? "-"}` : "Final standings"}
             </h3>
             <p className="mt-2 text-sm leading-6 text-ink/65">{state.eventRecap.shareText}</p>
@@ -1055,7 +1040,9 @@ export function PlayerApp({
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.24em] text-ink/45">Your team</p>
-                <h3 className="mt-2 text-xl font-semibold text-ink">{state.teamRecap.teamName}</h3>
+                <h3 className="mt-2 break-words text-xl font-semibold text-ink [overflow-wrap:anywhere]">
+                  {state.teamRecap.teamName}
+                </h3>
                 <p className="mt-2 text-sm text-ink/65">
                   Rank #{state.teamRecap.finalRank ?? "-"} · {state.teamRecap.resolvedChallenges} resolved plays
                 </p>
@@ -1108,7 +1095,9 @@ export function PlayerApp({
               {state.eventRecap.teamAwards.map((award) => (
                 <div key={award.kind} className="rounded-3xl bg-ink/5 p-4">
                   <p className="text-xs uppercase tracking-[0.22em] text-ink/45">{award.label}</p>
-                  <p className="mt-2 text-lg font-semibold text-ink">{award.teamName}</p>
+                  <p className="mt-2 break-words text-lg font-semibold text-ink [overflow-wrap:anywhere]">
+                    {award.teamName}
+                  </p>
                   <p className="mt-1 text-sm font-medium text-ink/75">{award.value}</p>
                   <p className="mt-2 text-sm leading-6 text-ink/60">{award.detail}</p>
                 </div>
@@ -1121,7 +1110,9 @@ export function PlayerApp({
               {state.eventRecap.taskAwards.map((award) => (
                 <div key={award.kind} className="rounded-3xl bg-ink/5 p-4">
                   <p className="text-xs uppercase tracking-[0.22em] text-ink/45">{award.label}</p>
-                  <p className="mt-2 text-lg font-semibold text-ink">{award.taskTitle}</p>
+                  <p className="mt-2 break-words text-lg font-semibold text-ink [overflow-wrap:anywhere]">
+                    {award.taskTitle}
+                  </p>
                   <p className="mt-1 text-sm font-medium text-ink/75">{award.value}</p>
                   <p className="mt-2 text-sm leading-6 text-ink/60">{award.detail}</p>
                 </div>
@@ -1129,7 +1120,9 @@ export function PlayerApp({
               {state.eventRecap.rivalryAward ? (
                 <div className="rounded-3xl bg-sea/8 p-4">
                   <p className="text-xs uppercase tracking-[0.22em] text-sea/80">{state.eventRecap.rivalryAward.label}</p>
-                  <p className="mt-2 text-lg font-semibold text-ink">{state.eventRecap.rivalryAward.matchup}</p>
+                  <p className="mt-2 break-words text-lg font-semibold text-ink [overflow-wrap:anywhere]">
+                    {state.eventRecap.rivalryAward.matchup}
+                  </p>
                   <p className="mt-1 text-sm font-medium text-ink/75">{state.eventRecap.rivalryAward.value}</p>
                   <p className="mt-2 text-sm leading-6 text-ink/60">{state.eventRecap.rivalryAward.detail}</p>
                 </div>
@@ -1187,18 +1180,11 @@ export function PlayerApp({
           </div>
         </div>
 
-        <div className="mt-6 flex flex-col gap-3 rounded-3xl bg-ink/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-6 rounded-3xl bg-ink/5 p-4">
           <div className="flex flex-wrap items-center gap-3 text-sm text-ink/70">
-            <div className="flex items-center gap-2">
-              <span>Join code</span>
-              <JoinCodeBadge code={state.event.joinCode} />
-            </div>
-            <span>Updated {formatUpdatedAt(state.refreshedAt)}</span>
-            {isRefreshing ? <span className="text-sea">Refreshing...</span> : null}
+            <span>Join code</span>
+            <JoinCodeBadge code={state.event.joinCode} />
           </div>
-          <Button tone="ghost" onClick={() => refreshNow({ announce: true })} disabled={isRefreshing}>
-            {isRefreshing ? "Refreshing..." : "Refresh now"}
-          </Button>
         </div>
       </Panel>
 
@@ -1283,7 +1269,7 @@ export function PlayerApp({
           <SectionHeading
             eyebrow="Team assignment"
             title="Waiting for your team"
-            description="You are in the live event, but your team is not visible yet. Pull to refresh or use the button above if this takes longer than expected."
+            description="You are in the live event, but your team is not visible yet. It should appear automatically as soon as the assignment reaches your device."
           />
           <div className="mt-6 space-y-3">
             <h3 className="text-sm font-semibold uppercase tracking-[0.24em] text-ink/55">Current leaderboard</h3>
@@ -1317,14 +1303,16 @@ export function PlayerApp({
           <div className="flex h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-[1.75rem] bg-mist shadow-panel sm:max-h-[92vh] sm:max-w-3xl sm:rounded-[2rem]">
             <div className="sticky top-0 z-10 border-b border-ink/5 bg-mist px-4 pb-4 pt-[max(env(safe-area-inset-top),1rem)] sm:px-6 sm:pt-6">
               <div className="flex items-start justify-between gap-4">
-                <div>
+                <div className="min-w-0 flex-1">
                   <Badge tone={selectedTask.type === "competitive" ? "accent" : "success"}>
                     {selectedTask.type}
                   </Badge>
-                  <h3 className="mt-3 text-2xl font-semibold text-ink">{selectedTask.title}</h3>
+                  <h3 className="mt-3 break-words text-2xl font-semibold text-ink [overflow-wrap:anywhere]">
+                    {selectedTask.title}
+                  </h3>
                   <p className="mt-2 text-sm text-ink/60">{selectedTask.shortDescription}</p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex shrink-0 flex-wrap gap-2 self-start">
                   {activeChallenge && activeChallenge.taskId === selectedTask.taskId && activeChallenge.canCancelByMe ? (
                     <Button
                       tone="danger"
