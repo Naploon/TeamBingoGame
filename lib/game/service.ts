@@ -14,6 +14,7 @@ import {
   teams,
   teamTaskStates,
   type ChallengeRecord,
+  type GameInstanceRecord,
   type PlayerRegistrationRecord,
   type TaskRatingRecord,
   type TaskRecord,
@@ -26,6 +27,8 @@ import {
   generateTeamPlan,
   recomputeTeamTaskStates,
 } from "@/lib/game/engine";
+import { buildPlayerRecaps } from "@/lib/game/insights";
+import type { BoardOpponentOption, PendingAction, PlayerBoardCard } from "@/lib/game/types";
 import {
   createChallengeSchema,
   createEventSchema,
@@ -211,6 +214,164 @@ function buildTaskRatingSummary(ratings: TaskRatingRecord[]) {
   });
 
   return byTask;
+}
+
+function getTeamDisplayName(team: Pick<TeamRecord, "name" | "autoName">) {
+  return team.name ?? team.autoName;
+}
+
+function getOpponentUnavailableReason(input: {
+  myTeamHasLockedName: boolean;
+  teamHasLockedName: boolean;
+  activeChallenge: boolean;
+  myCompletionTier: string;
+  opponentCompletionTier: string;
+  isBlockedAfterLoss: boolean;
+}) {
+  if (!input.myTeamHasLockedName) {
+    return "Lock in your team name before starting tasks.";
+  }
+
+  if (!input.teamHasLockedName) {
+    return "Waiting for this team to lock in a name.";
+  }
+
+  if (input.activeChallenge) {
+    return "Finish your current challenge before starting another.";
+  }
+
+  if (input.myCompletionTier === "platinum") {
+    return "Your team already reached diamond on this task.";
+  }
+
+  if (input.opponentCompletionTier === "platinum") {
+    return "This team already reached diamond on this task.";
+  }
+
+  if (input.isBlockedAfterLoss) {
+    return "Challenge a different team before rematching here.";
+  }
+
+  return null;
+}
+
+function buildPendingAction(input: {
+  eventStatus: GameInstanceRecord["status"];
+  hasTeam: boolean;
+  teamNeedsName: boolean;
+  isCaptain: boolean;
+  activeChallenge: {
+    taskId: string;
+    status: ChallengeRecord["status"];
+    challengerTeamId: string;
+    canRateByMe: boolean;
+  } | null;
+  myTeamId: string | null;
+  hasChallengeableTask: boolean;
+}): PendingAction {
+  if (input.eventStatus === "ended") {
+    return {
+      kind: "view_recap",
+      title: "See how the game finished",
+      description: "Open the final recap for team awards, favorite tasks, and the final podium.",
+      ctaLabel: "Open recap",
+      targetView: "recap",
+      taskId: null,
+    };
+  }
+
+  if (input.eventStatus !== "live") {
+    return {
+      kind: input.hasTeam ? "wait_for_start" : "wait_for_team",
+      title: input.hasTeam ? "Waiting for the event to start" : "Waiting for team assignments",
+      description: input.hasTeam
+        ? "Keep this page open. Your board and team actions will appear automatically when the game goes live."
+        : "You are registered. Teams and the board will appear automatically when the organizer starts the game.",
+      ctaLabel: "Leaderboard",
+      targetView: "leaderboard",
+      taskId: null,
+    };
+  }
+
+  if (!input.hasTeam) {
+    return {
+      kind: "wait_for_team",
+      title: "Waiting for your team",
+      description: "You are registered, but teams have not been assigned to you yet.",
+      ctaLabel: "Leaderboard",
+      targetView: "leaderboard",
+      taskId: null,
+    };
+  }
+
+  if (input.teamNeedsName) {
+    if (input.isCaptain) {
+      return {
+        kind: "lock_team_name",
+        title: "Lock in your team name",
+        description: "Your team cannot start tasks or appear as a challenge target until you save a final name.",
+        ctaLabel: "Choose name",
+        targetView: "team",
+        taskId: null,
+      };
+    }
+
+    return {
+      kind: "wait_for_captain",
+      title: "Waiting for your captain",
+      description: "Your captain needs to lock in the team name before tasks can begin.",
+      ctaLabel: "View team",
+      targetView: "team",
+      taskId: null,
+    };
+  }
+
+  if (input.activeChallenge?.status === "open") {
+    const isChallenger = input.activeChallenge.challengerTeamId === input.myTeamId;
+    return {
+      kind: isChallenger ? "submit_result" : "open_active_challenge",
+      title: isChallenger ? "Submit the current result" : "Active challenge in progress",
+      description: isChallenger
+        ? "Open the active task, record the outcome, and keep the game moving."
+        : "Your team is in a live challenge. Follow the active task for updates while the challenger submits the result.",
+      ctaLabel: "Open challenge",
+      targetView: "board",
+      taskId: input.activeChallenge.taskId,
+    };
+  }
+
+  if (input.activeChallenge?.canRateByMe) {
+    return {
+      kind: "rate_task",
+      title: "Rate the last task",
+      description: "Give the task a star rating to finish the challenge flow for your team.",
+      ctaLabel: "Rate task",
+      targetView: "board",
+      taskId: input.activeChallenge.taskId,
+    };
+  }
+
+  if (input.activeChallenge) {
+    return {
+      kind: "wait_for_rating",
+      title: "Waiting for the other team",
+      description: "The challenge result is in. The last step is waiting for the other team to finish its rating.",
+      ctaLabel: "View history",
+      targetView: "history",
+      taskId: input.activeChallenge.taskId,
+    };
+  }
+
+  return {
+    kind: "start_next_challenge",
+    title: input.hasChallengeableTask ? "Pick your next challenge" : "No challenge available yet",
+    description: input.hasChallengeableTask
+      ? "Open a task, compare the available opponents, and start the next match from your board."
+      : "More opponents will appear once other teams lock names or clear active challenges.",
+    ctaLabel: input.hasChallengeableTask ? "Open board" : "Check leaderboard",
+    targetView: input.hasChallengeableTask ? "board" : "leaderboard",
+    taskId: null,
+  };
 }
 
 function getMatchHistoryResult(input: {
@@ -582,6 +743,13 @@ export async function getPlayerState(slug: string, authUserId: string) {
     db.select().from(challenges).where(eq(challenges.gameInstanceId, eventId)).orderBy(desc(challenges.createdAt)),
     db.select().from(taskRatings).where(eq(taskRatings.gameInstanceId, eventId)),
   ]);
+  const allStateRows =
+    eventTeams.length > 0
+      ? await db
+          .select()
+          .from(teamTaskStates)
+          .where(inArray(teamTaskStates.teamId, eventTeams.map((team) => team.id)))
+      : [];
 
   const membersByTeam = new Map<string, PlayerRegistrationRecord[]>();
   registrations.forEach((registration) => {
@@ -595,6 +763,7 @@ export async function getPlayerState(slug: string, authUserId: string) {
   });
 
   const myTeam = context.team;
+  const teamById = new Map(eventTeams.map((team) => [team.id, team]));
   const ratingsByChallengeTeam = new Map(
     eventRatings.map((rating) => [taskRatingKey(rating.challengeId, rating.teamId), rating]),
   );
@@ -613,13 +782,56 @@ export async function getPlayerState(slug: string, authUserId: string) {
           (challenge) =>
             challenge.status !== "open" &&
             challenge.status !== "cancelled" &&
-            (challenge.challengerTeamId === myTeam.id || challenge.opponentTeamId === myTeam.id) &&
-            !ratingsByChallengeTeam.has(taskRatingKey(challenge.id, myTeam.id)),
+          (challenge.challengerTeamId === myTeam.id || challenge.opponentTeamId === myTeam.id) &&
+          !ratingsByChallengeTeam.has(taskRatingKey(challenge.id, myTeam.id)),
         ) ?? null
       : null;
   const activeChallenge = openChallenge ?? pendingRatingChallenge;
+  const activeChallengeView = activeChallenge
+    ? {
+        id: activeChallenge.id,
+        taskId: activeChallenge.taskId,
+        taskTitle: "Task",
+        challengerTeamId: activeChallenge.challengerTeamId,
+        opponentTeamId: activeChallenge.opponentTeamId,
+        winnerTeamId: activeChallenge.winnerTeamId,
+        note: activeChallenge.note,
+        type: activeChallenge.type,
+        status: activeChallenge.status,
+        createdAt: activeChallenge.createdAt,
+        resolvedAt: activeChallenge.resolvedAt,
+        isResolvableByMe:
+          activeChallenge.status === "open" && activeChallenge.challengerTeamId === myTeam?.id,
+        canCancelByMe:
+          activeChallenge.status === "open" && activeChallenge.challengerTeamId === myTeam?.id,
+        canRateByMe:
+          activeChallenge.status !== "open" &&
+          activeChallenge.status !== "cancelled" &&
+          Boolean(myTeamId) &&
+          !ratingsByChallengeTeam.has(taskRatingKey(activeChallenge.id, myTeamId ?? "")),
+        myRating: myTeamId
+          ? (ratingsByChallengeTeam.get(taskRatingKey(activeChallenge.id, myTeamId))?.stars ?? null)
+          : null,
+      }
+    : null;
 
   const taskById = new Map(eventTasks.map((task) => [task.id, task]));
+  if (activeChallengeView) {
+    activeChallengeView.taskTitle = taskById.get(activeChallengeView.taskId)?.title ?? "Task";
+  }
+  const taskStateByTeamTaskId = new Map(
+    allStateRows.map((state) => [`${state.teamId}:${state.taskId}`, state]),
+  );
+  const leaderboard = buildLeaderboard({
+    teams: eventTeams.map((team) => ({
+      id: team.id,
+      teamName: getTeamDisplayName(team),
+    })),
+    states: allStateRows,
+  });
+  const leaderboardRankByTeamId = new Map(
+    leaderboard.map((team, index) => [team.teamId, index + 1]),
+  );
   const matchHistory =
     myTeamId === null
       ? []
@@ -648,8 +860,8 @@ export async function getPlayerState(slug: string, authUserId: string) {
               challengerTeamId: challenge.challengerTeamId,
               opponentTeamId,
               opponentTeamName:
-                eventTeams.find((team) => team.id === opponentTeamId)?.name ??
-                eventTeams.find((team) => team.id === opponentTeamId)?.autoName ??
+                teamById.get(opponentTeamId)?.name ??
+                teamById.get(opponentTeamId)?.autoName ??
                 "Team",
               status: challenge.status,
               result: getMatchHistoryResult({
@@ -667,12 +879,49 @@ export async function getPlayerState(slug: string, authUserId: string) {
               opponentRating: opponentRating?.stars ?? null,
             };
           });
-  const board = stateRows
+  const board: PlayerBoardCard[] = stateRows
     .map((state) => {
       const task = taskById.get(state.taskId);
       if (!task) {
         return null;
       }
+
+      const opponentOptions: BoardOpponentOption[] = eventTeams
+        .filter((team) => team.id !== myTeamId)
+        .map((team) => {
+          const opponentState = taskStateByTeamTaskId.get(`${team.id}:${task.id}`);
+          const completionTier = opponentState?.completionTier ?? "none";
+          const isNameLocked = Boolean(team.name);
+          const isBlockedAfterLoss = state.lastLossOpponentTeamId === team.id;
+          const reason = getOpponentUnavailableReason({
+            myTeamHasLockedName: Boolean(myTeam?.name),
+            teamHasLockedName: isNameLocked,
+            activeChallenge: Boolean(activeChallengeView),
+            myCompletionTier: state.completionTier,
+            opponentCompletionTier: completionTier,
+            isBlockedAfterLoss,
+          });
+
+          return {
+            teamId: team.id,
+            teamName: getTeamDisplayName(team),
+            leaderboardRank: leaderboardRankByTeamId.get(team.id) ?? null,
+            completionTier,
+            isNameLocked,
+            isBlockedAfterLoss,
+            canChallenge: reason === null,
+            reason,
+          };
+        })
+        .sort((left, right) => {
+          const leftRank = left.leaderboardRank ?? Number.MAX_SAFE_INTEGER;
+          const rightRank = right.leaderboardRank ?? Number.MAX_SAFE_INTEGER;
+          if (leftRank !== rightRank) {
+            return leftRank - rightRank;
+          }
+
+          return left.teamName.localeCompare(right.teamName);
+        });
 
       return {
         taskId: task.id,
@@ -689,30 +938,53 @@ export async function getPlayerState(slug: string, authUserId: string) {
         lastLossOpponentTeamId: state.lastLossOpponentTeamId,
         ratingAverage: taskRatingSummary.get(task.id)?.ratingAverage ?? null,
         ratingCount: taskRatingSummary.get(task.id)?.ratingCount ?? 0,
+        isActiveChallengeTask: activeChallengeView?.taskId === task.id,
         canChallenge:
           context.event.status === "live" &&
-          !activeChallenge &&
-          state.completionTier !== "platinum",
+          !activeChallengeView &&
+          state.completionTier !== "platinum" &&
+          opponentOptions.some((team) => team.canChallenge),
+        opponentOptions,
       };
     })
     .filter((card): card is NonNullable<typeof card> => card !== null)
     .sort((left, right) => left!.boardPosition - right!.boardPosition);
-
-  const leaderboard = buildLeaderboard({
+  const teamNeedsName = Boolean(myTeam && !myTeam.name);
+  const { teamRecap, eventRecap } = buildPlayerRecaps({
     teams: eventTeams.map((team) => ({
       id: team.id,
-      teamName: team.name ?? team.autoName,
+      teamName: getTeamDisplayName(team),
     })),
-    states:
-      eventTeams.length > 0
-        ? await db
-            .select()
-            .from(teamTaskStates)
-            .where(inArray(teamTaskStates.teamId, eventTeams.map((team) => team.id)))
-        : [],
+    tasks: eventTasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      type: task.type,
+    })),
+    challenges: eventChallenges,
+    ratings: eventRatings.map((rating) => ({
+      challengeId: rating.challengeId,
+      taskId: rating.taskId,
+      teamId: rating.teamId,
+      stars: rating.stars,
+    })),
+    states: allStateRows,
+    leaderboard,
+    myTeamId,
+    startedAt: context.event.startedAt,
+    endedAt: context.event.endedAt,
+  });
+  const pendingAction = buildPendingAction({
+    eventStatus: context.event.status,
+    hasTeam: Boolean(myTeamId),
+    teamNeedsName,
+    isCaptain: context.player.isCaptain,
+    activeChallenge: activeChallengeView,
+    myTeamId,
+    hasChallengeableTask: board.some((card) => card.canChallenge),
   });
 
   return {
+    refreshedAt: new Date().toISOString(),
     event: {
       id: context.event.id,
       slug: context.event.slug,
@@ -738,9 +1010,13 @@ export async function getPlayerState(slug: string, authUserId: string) {
         }
       : null,
     board,
+    pendingAction,
+    teamRecap,
+    eventRecap,
     teams: eventTeams.map((team) => ({
       id: team.id,
-      name: team.name ?? team.autoName,
+      name: getTeamDisplayName(team),
+      isNameLocked: Boolean(team.name),
       captainPlayerId: team.captainPlayerId,
       members: (membersByTeam.get(team.id) ?? []).map((player) => ({
         id: player.id,
@@ -748,33 +1024,7 @@ export async function getPlayerState(slug: string, authUserId: string) {
         isCaptain: player.isCaptain,
       })),
     })),
-    activeChallenge: activeChallenge
-      ? {
-          id: activeChallenge.id,
-          taskId: activeChallenge.taskId,
-          taskTitle: taskById.get(activeChallenge.taskId)?.title ?? "Task",
-          challengerTeamId: activeChallenge.challengerTeamId,
-          opponentTeamId: activeChallenge.opponentTeamId,
-          winnerTeamId: activeChallenge.winnerTeamId,
-          note: activeChallenge.note,
-          type: activeChallenge.type,
-          status: activeChallenge.status,
-          createdAt: activeChallenge.createdAt,
-          resolvedAt: activeChallenge.resolvedAt,
-          isResolvableByMe:
-            activeChallenge.status === "open" && activeChallenge.challengerTeamId === myTeam?.id,
-          canCancelByMe:
-            activeChallenge.status === "open" && activeChallenge.challengerTeamId === myTeam?.id,
-          canRateByMe:
-            activeChallenge.status !== "open" &&
-            activeChallenge.status !== "cancelled" &&
-            Boolean(myTeamId) &&
-            !ratingsByChallengeTeam.has(taskRatingKey(activeChallenge.id, myTeamId ?? "")),
-          myRating: myTeamId
-            ? (ratingsByChallengeTeam.get(taskRatingKey(activeChallenge.id, myTeamId))?.stars ?? null)
-            : null,
-        }
-      : null,
+    activeChallenge: activeChallengeView,
     matchHistory,
     leaderboard,
   };

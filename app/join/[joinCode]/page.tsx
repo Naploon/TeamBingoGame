@@ -94,6 +94,9 @@ export default async function JoinEventPage({
             }
           />
         </div>
+        <div className="mt-6 rounded-[1.75rem] bg-sea/8 p-4 text-sm leading-6 text-ink/70">
+          One player account keeps your join state, team, and match history together. If you leave the app and return later, signing back into the same account brings you back to this event.
+        </div>
         {playerUser ? (
           <>
             <div className="mt-6 rounded-[1.75rem] bg-ink/5 p-4">

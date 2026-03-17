@@ -105,6 +105,9 @@ export function PlayerAuthForm({
           </button>
         </div>
       ) : null}
+      <p className="text-sm leading-6 text-ink/65">
+        Use the same email account each time so the app can restore your player state and bring you back to the same event.
+      </p>
       <form className="space-y-4" onSubmit={handleSubmit}>
         <label className="block space-y-2 text-sm font-medium text-ink">
           <span>Email address</span>
