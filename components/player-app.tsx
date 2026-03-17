@@ -1596,8 +1596,8 @@ export function PlayerApp({
       ) : null}
 
       {showInitialTeamSetup && state.team ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-ink/55 p-0 sm:items-center sm:p-6">
-          <div className="w-full max-w-2xl rounded-t-[2rem] bg-mist p-5 shadow-panel sm:rounded-[2rem] sm:p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-ink/55 p-4 sm:p-6">
+          <div className="max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-[2rem] bg-mist p-5 shadow-panel sm:max-h-[calc(100dvh-3rem)] sm:p-6">
             <Badge tone="accent">Team setup</Badge>
             <div className="mt-4">
               <SectionHeading
