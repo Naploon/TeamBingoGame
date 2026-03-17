@@ -22,6 +22,17 @@ type InstallPromptEvent = Event & {
 const STAR_PATH =
   "M12 1.75l3.14 6.35 7.01 1.02-5.08 4.95 1.2 6.98L12 17.74 5.73 21.05l1.2-6.98-5.08-4.95 7.01-1.02L12 1.75Z";
 
+const BIRTHDAY_CONFETTI_PIECES = [
+  "left-[4%] top-12 h-12 w-12 rounded-full bg-fuchsia-300/70 blur-[1px] animate-pulse",
+  "left-[18%] top-36 h-5 w-16 -rotate-12 rounded-full bg-amber-300/80",
+  "right-[12%] top-20 h-14 w-14 rounded-full bg-cyan-300/75 blur-[1px] animate-pulse",
+  "right-[6%] top-48 h-5 w-20 rotate-12 rounded-full bg-rose-300/80",
+  "left-[10%] bottom-40 h-16 w-16 rounded-full bg-orange-300/65 blur-sm",
+  "left-[32%] bottom-20 h-4 w-14 -rotate-[24deg] rounded-full bg-lime-300/80",
+  "right-[24%] bottom-24 h-16 w-16 rounded-full bg-violet-300/60 blur-sm",
+  "right-[8%] bottom-44 h-4 w-12 rotate-[28deg] rounded-full bg-sky-300/80",
+];
+
 function tierClasses(tier: string) {
   switch (tier) {
     case "gold":
@@ -128,10 +139,12 @@ function BoardTile({
   card,
   index,
   onClick,
+  birthdayMode = false,
 }: {
   card: PlayerState["board"][number];
   index: number;
   onClick: () => void;
+  birthdayMode?: boolean;
 }) {
   const status = getBoardTileStatus(card);
 
@@ -141,6 +154,7 @@ function BoardTile({
       className={cn(
         "group aspect-square min-w-0 overflow-hidden rounded-[1.2rem] border p-2 text-left transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sea/60 md:rounded-[1.35rem] md:p-3",
         tierClasses(card.completionTier),
+        birthdayMode ? "border-white/80 shadow-[0_14px_26px_rgba(236,72,153,0.16)]" : "",
         card.isActiveChallengeTask ? "ring-2 ring-sea/60" : "",
       )}
       onClick={onClick}
@@ -371,20 +385,35 @@ function ViewTabs({
   availableViews,
   view,
   onSelect,
+  birthdayMode = false,
 }: {
   availableViews: PlayerView[];
   view: PlayerView;
   onSelect: (view: PlayerView) => void;
+  birthdayMode?: boolean;
 }) {
   return (
-    <div className="hidden gap-2 rounded-full bg-ink/5 p-1 md:flex">
+    <div
+      className={cn(
+        "hidden gap-2 rounded-full bg-ink/5 p-1 md:flex",
+        birthdayMode
+          ? "bg-[linear-gradient(135deg,rgba(255,255,255,0.9),rgba(253,242,248,0.92),rgba(254,249,195,0.92),rgba(224,231,255,0.92))] shadow-[0_14px_30px_rgba(236,72,153,0.12)] ring-1 ring-fuchsia-200/60"
+          : "",
+      )}
+    >
       {availableViews.map((tab) => (
         <button
           key={tab}
           type="button"
           className={cn(
             "min-h-11 flex-1 rounded-full px-3 text-sm font-semibold transition",
-            view === tab ? "bg-ink text-white" : "text-ink/60",
+            view === tab
+              ? birthdayMode
+                ? "bg-[linear-gradient(135deg,#ec4899,#f97316,#facc15)] text-white shadow-[0_8px_18px_rgba(236,72,153,0.28)]"
+                : "bg-ink text-white"
+              : birthdayMode
+                ? "text-fuchsia-900/80"
+                : "text-ink/60",
           )}
           onClick={() => onSelect(tab)}
         >
@@ -399,13 +428,22 @@ function MobileBottomNav({
   availableViews,
   view,
   onSelect,
+  birthdayMode = false,
 }: {
   availableViews: PlayerView[];
   view: PlayerView;
   onSelect: (view: PlayerView) => void;
+  birthdayMode?: boolean;
 }) {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/60 bg-mist/95 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-12px_35px_rgba(16,33,47,0.08)] backdrop-blur md:hidden">
+    <div
+      className={cn(
+        "fixed inset-x-0 bottom-0 z-30 border-t border-white/60 bg-mist/95 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-12px_35px_rgba(16,33,47,0.08)] backdrop-blur md:hidden",
+        birthdayMode
+          ? "border-fuchsia-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(253,242,248,0.94),rgba(254,249,195,0.94),rgba(224,231,255,0.94))]"
+          : "",
+      )}
+    >
       <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto pb-1">
         {availableViews.map((tab) => (
           <button
@@ -413,7 +451,13 @@ function MobileBottomNav({
             type="button"
             className={cn(
               "min-w-[5rem] shrink-0 rounded-2xl px-3 py-3 text-center text-xs font-semibold uppercase tracking-[0.18em] transition",
-              view === tab ? "bg-ink text-white" : "bg-white/80 text-ink/65",
+              view === tab
+                ? birthdayMode
+                  ? "bg-[linear-gradient(135deg,#ec4899,#f97316,#facc15)] text-white shadow-[0_8px_18px_rgba(236,72,153,0.24)]"
+                  : "bg-ink text-white"
+                : birthdayMode
+                  ? "bg-white/90 text-fuchsia-900/80 ring-1 ring-fuchsia-200/60"
+                  : "bg-white/80 text-ink/65",
             )}
             onClick={() => onSelect(tab)}
           >
@@ -446,6 +490,8 @@ export function PlayerApp({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [showInstallHint, setShowInstallHint] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+  const [birthdayMode, setBirthdayMode] = useState(false);
+  const [birthdayModeReady, setBirthdayModeReady] = useState(false);
 
   const availableViews = getAvailableViews(state);
   const selectedTask = state.board.find((card) => card.taskId === selectedTaskId) ?? null;
@@ -483,6 +529,19 @@ export function PlayerApp({
           return true;
       }
     });
+  const birthdayModeStorageKey = `player-birthday-mode:${slug}`;
+  const birthdayShellClass = birthdayMode
+    ? "rounded-[2rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(253,242,248,0.88)_18%,rgba(254,249,195,0.9)_42%,rgba(224,231,255,0.88)_66%,rgba(236,72,153,0.08)_100%)] p-3 shadow-[0_24px_70px_rgba(236,72,153,0.14)] md:p-4"
+    : "";
+  const birthdayHeroPanelClass = birthdayMode
+    ? "border-fuchsia-300/55 bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(254,240,138,0.82),rgba(249,168,212,0.78),rgba(125,211,252,0.78))] shadow-[0_18px_44px_rgba(236,72,153,0.24)]"
+    : "bg-gradient-to-br from-white via-white to-sand/50";
+  const birthdayAccentPanelClass = birthdayMode
+    ? "border-fuchsia-300/55 bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(253,242,248,0.94),rgba(254,249,195,0.86),rgba(224,231,255,0.84))] shadow-[0_16px_34px_rgba(236,72,153,0.14)]"
+    : "";
+  const birthdaySoftPanelClass = birthdayMode
+    ? "border-orange-200/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(254,249,195,0.82),rgba(255,237,213,0.78))] shadow-[0_14px_30px_rgba(249,115,22,0.12)]"
+    : "";
 
   async function readResponse(response: Response, fallbackMessage: string) {
     const payload = await response.json();
@@ -672,6 +731,27 @@ export function PlayerApp({
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    setBirthdayMode(window.localStorage.getItem(birthdayModeStorageKey) === "on");
+    setBirthdayModeReady(true);
+  }, [birthdayModeStorageKey]);
+
+  useEffect(() => {
+    if (!birthdayModeReady || typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(birthdayModeStorageKey, birthdayMode ? "on" : "off");
+  }, [birthdayMode, birthdayModeReady, birthdayModeStorageKey]);
+
+  function toggleBirthdayMode() {
+    setBirthdayMode((current) => !current);
+  }
 
   async function dismissInstallHint() {
     window.localStorage.setItem(`player-install-hint:${slug}`, "dismissed");
@@ -863,6 +943,7 @@ export function PlayerApp({
               key={card.taskId}
               card={card}
               index={index}
+              birthdayMode={birthdayMode}
               onClick={() => setSelectedTaskId(card.taskId)}
             />
           ))}
@@ -1228,11 +1309,28 @@ export function PlayerApp({
   }
 
   return (
-    <div className="space-y-5 pb-24 md:pb-0">
-      <Panel className="overflow-hidden bg-gradient-to-br from-white via-white to-sand/50">
+    <div className={cn("relative isolate space-y-5 pb-24 md:pb-0", birthdayShellClass)}>
+      {birthdayMode ? (
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[2rem]">
+          <div className="absolute -left-10 top-8 h-40 w-40 rounded-full bg-fuchsia-300/35 blur-3xl" />
+          <div className="absolute right-0 top-20 h-44 w-44 rounded-full bg-amber-300/30 blur-3xl" />
+          <div className="absolute bottom-16 left-12 h-40 w-40 rounded-full bg-cyan-300/30 blur-3xl" />
+          <div className="absolute bottom-0 right-8 h-44 w-44 rounded-full bg-rose-300/30 blur-3xl" />
+          {BIRTHDAY_CONFETTI_PIECES.map((piece, index) => (
+            <span key={index} className={cn("absolute", piece)} />
+          ))}
+        </div>
+      ) : null}
+
+      <Panel className={cn("overflow-hidden", birthdayHeroPanelClass)}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-3">
             <Badge tone="accent">{state.event.status.replace("_", " ")}</Badge>
+            {birthdayMode ? (
+              <div className="inline-flex rounded-full bg-white/75 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-fuchsia-700 shadow-sm ring-1 ring-fuchsia-200/70">
+                Birthday mode
+              </div>
+            ) : null}
             <SectionHeading
               eyebrow="Live event"
               title={state.event.title}
@@ -1243,7 +1341,14 @@ export function PlayerApp({
               }
             />
           </div>
-          <div className="rounded-3xl bg-ink p-4 text-white shadow-panel">
+          <div
+            className={cn(
+              "rounded-3xl bg-ink p-4 text-white shadow-panel",
+              birthdayMode
+                ? "bg-[linear-gradient(135deg,#ec4899,#f97316,#facc15,#06b6d4)] text-white ring-2 ring-white/65"
+                : "",
+            )}
+          >
             <p className="text-xs uppercase tracking-[0.24em] text-white/65">You</p>
             <p className="mt-2 text-lg font-semibold">{state.me.displayName}</p>
             <p className="text-sm text-white/75">{state.me.isCaptain ? "Captain" : "Team member"}</p>
@@ -1253,11 +1358,44 @@ export function PlayerApp({
           </div>
         </div>
 
-        <div className="mt-6 rounded-3xl bg-ink/5 p-4">
+        <div
+          className={cn(
+            "mt-6 rounded-3xl p-4",
+            birthdayMode
+              ? "bg-[linear-gradient(135deg,rgba(255,255,255,0.82),rgba(253,242,248,0.92),rgba(254,249,195,0.9))] ring-1 ring-fuchsia-200/65"
+              : "bg-ink/5",
+          )}
+        >
           <div className="flex flex-wrap items-center gap-3 text-sm text-ink/70">
-            <span>Join code</span>
-            <JoinCodeBadge code={state.event.joinCode} />
+            <span>{birthdayMode ? "Secret mode" : "Join code"}</span>
+            <button
+              type="button"
+              className="group"
+              onClick={toggleBirthdayMode}
+              aria-pressed={birthdayMode}
+              aria-label={birthdayMode ? "Disable birthday mode" : "Enable birthday mode"}
+            >
+              <JoinCodeBadge
+                code={state.event.joinCode}
+                className={cn(
+                  "cursor-pointer transition group-hover:scale-[1.03] group-focus-visible:outline-none",
+                  birthdayMode
+                    ? "bg-[linear-gradient(135deg,#ec4899,#f97316,#facc15,#06b6d4)] text-white shadow-[0_12px_26px_rgba(236,72,153,0.34)] ring-2 ring-white/70"
+                    : "hover:bg-ink/90",
+                )}
+              />
+            </button>
+            {birthdayMode ? (
+              <span className="inline-flex rounded-full bg-white/85 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-fuchsia-700 ring-1 ring-fuchsia-200/70">
+                Party on
+              </span>
+            ) : null}
           </div>
+          {birthdayMode ? (
+            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.22em] text-fuchsia-700/85">
+              Tap the code again if you want to calm the colors down.
+            </p>
+          ) : null}
         </div>
       </Panel>
 
@@ -1265,7 +1403,7 @@ export function PlayerApp({
       {error ? <p className="rounded-2xl bg-coral/15 px-4 py-3 text-sm text-coral">{error}</p> : null}
 
       {showInstallHint ? (
-        <Panel className="border-sea/20 bg-sea/8">
+        <Panel className={cn("border-sea/20 bg-sea/8", birthdaySoftPanelClass)}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.24em] text-sea/80">Add to Home Screen</p>
@@ -1286,10 +1424,17 @@ export function PlayerApp({
         </Panel>
       ) : null}
 
-      <Panel className="border-sea/15 bg-gradient-to-br from-white via-white to-sea/10">
+      <Panel
+        className={cn(
+          "border-sea/15 bg-gradient-to-br from-white via-white to-sea/10",
+          birthdayAccentPanelClass,
+        )}
+      >
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-sea/80">What happens now</p>
+            <p className={cn("text-xs uppercase tracking-[0.24em] text-sea/80", birthdayMode ? "text-fuchsia-700" : "")}>
+              What happens now
+            </p>
             <h3 className="mt-2 text-xl font-semibold text-ink">{state.pendingAction.title}</h3>
             <p className="mt-2 text-sm leading-6 text-ink/65">{state.pendingAction.description}</p>
           </div>
@@ -1298,10 +1443,12 @@ export function PlayerApp({
       </Panel>
 
       {activeChallenge ? (
-        <Panel className="border-sea/15 bg-sea/8">
+        <Panel className={cn("border-sea/15 bg-sea/8", birthdayAccentPanelClass)}>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-sea/80">Active challenge</p>
+              <p className={cn("text-xs uppercase tracking-[0.24em] text-sea/80", birthdayMode ? "text-fuchsia-700" : "")}>
+                Active challenge
+              </p>
               <h3 className="mt-2 text-xl font-semibold text-ink">{activeChallenge.taskTitle}</h3>
               <p className="mt-2 text-sm text-ink/65">
                 {getTeamLabel(activeChallenge.challengerTeamId)} vs {getTeamLabel(activeChallenge.opponentTeamId)}
@@ -1320,7 +1467,7 @@ export function PlayerApp({
       ) : null}
 
       {state.event.status !== "live" && state.event.status !== "ended" ? (
-        <Panel>
+        <Panel className={birthdayAccentPanelClass}>
           <SectionHeading
             eyebrow="Lobby"
             title="Waiting for the start"
@@ -1338,7 +1485,7 @@ export function PlayerApp({
           </div>
         </Panel>
       ) : state.event.status === "live" && !state.team ? (
-        <Panel>
+        <Panel className={birthdayAccentPanelClass}>
           <SectionHeading
             eyebrow="Team assignment"
             title="Waiting for your team"
@@ -1351,10 +1498,10 @@ export function PlayerApp({
         </Panel>
       ) : (
         <>
-          <ViewTabs availableViews={availableViews} view={view} onSelect={setView} />
+          <ViewTabs availableViews={availableViews} view={view} onSelect={setView} birthdayMode={birthdayMode} />
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
-            <Panel className="min-w-0">{renderMainContent()}</Panel>
-            <Panel className="hidden lg:block">
+            <Panel className={cn("min-w-0", birthdayAccentPanelClass)}>{renderMainContent()}</Panel>
+            <Panel className={cn("hidden lg:block", birthdayAccentPanelClass)}>
               <SectionHeading
                 eyebrow={state.event.status === "ended" ? "Final standings" : "Live standings"}
                 title={state.event.status === "ended" ? "Where teams finished" : "Where teams stand"}
@@ -1367,14 +1514,36 @@ export function PlayerApp({
               <div className="mt-5 space-y-3">{renderLeaderboardView()}</div>
             </Panel>
           </div>
-          <MobileBottomNav availableViews={availableViews} view={view} onSelect={setView} />
+          <MobileBottomNav
+            availableViews={availableViews}
+            view={view}
+            onSelect={setView}
+            birthdayMode={birthdayMode}
+          />
         </>
       )}
 
       {selectedTask ? (
-        <div className="fixed inset-0 z-40 overflow-hidden bg-ink/45 p-2 sm:flex sm:items-center sm:justify-center sm:p-6">
-          <div className="flex h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-[1.75rem] bg-mist shadow-panel sm:max-h-[92vh] sm:max-w-3xl sm:rounded-[2rem]">
-            <div className="sticky top-0 z-10 border-b border-ink/5 bg-mist px-4 pb-4 pt-[max(env(safe-area-inset-top),1rem)] sm:px-6 sm:pt-6">
+        <div
+          className={cn(
+            "fixed inset-0 z-40 overflow-hidden bg-ink/45 p-2 sm:flex sm:items-center sm:justify-center sm:p-6",
+            birthdayMode ? "bg-fuchsia-950/35" : "",
+          )}
+        >
+          <div
+            className={cn(
+              "flex h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-[1.75rem] bg-mist shadow-panel sm:max-h-[92vh] sm:max-w-3xl sm:rounded-[2rem]",
+              birthdayMode
+                ? "border border-fuchsia-200/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(253,242,248,0.96),rgba(254,249,195,0.88),rgba(224,231,255,0.9))] shadow-[0_24px_70px_rgba(236,72,153,0.25)]"
+                : "",
+            )}
+          >
+            <div
+              className={cn(
+                "sticky top-0 z-10 border-b border-ink/5 bg-mist px-4 pb-4 pt-[max(env(safe-area-inset-top),1rem)] sm:px-6 sm:pt-6",
+                birthdayMode ? "bg-white/70 backdrop-blur" : "",
+              )}
+            >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <Badge tone={selectedTask.type === "competitive" ? "accent" : "success"}>
@@ -1414,7 +1583,13 @@ export function PlayerApp({
                     type="button"
                     className={cn(
                       "rounded-full px-4 py-2 text-sm font-semibold transition",
-                      taskSheetMode === mode ? "bg-ink text-white" : "bg-ink/5 text-ink/60",
+                      taskSheetMode === mode
+                        ? birthdayMode
+                          ? "bg-[linear-gradient(135deg,#ec4899,#f97316,#facc15)] text-white shadow-[0_8px_18px_rgba(236,72,153,0.2)]"
+                          : "bg-ink text-white"
+                        : birthdayMode
+                          ? "bg-white/80 text-fuchsia-900/75 ring-1 ring-fuchsia-200/70"
+                          : "bg-ink/5 text-ink/60",
                     )}
                     onClick={() => setTaskSheetMode(mode)}
                   >
@@ -1612,7 +1787,12 @@ export function PlayerApp({
               </div>
             </div>
 
-            <div className="sticky bottom-0 border-t border-ink/5 bg-mist/95 px-4 py-4 backdrop-blur sm:px-6">
+            <div
+              className={cn(
+                "sticky bottom-0 border-t border-ink/5 bg-mist/95 px-4 py-4 backdrop-blur sm:px-6",
+                birthdayMode ? "bg-white/70" : "",
+              )}
+            >
               {taskSheetMode === "details" ? (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-ink/60">
@@ -1669,8 +1849,20 @@ export function PlayerApp({
       ) : null}
 
       {showInitialTeamSetup && state.team ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-ink/55 p-4 sm:p-6">
-          <div className="max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-[2rem] bg-mist p-5 shadow-panel sm:max-h-[calc(100dvh-3rem)] sm:p-6">
+        <div
+          className={cn(
+            "fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-ink/55 p-4 sm:p-6",
+            birthdayMode ? "bg-fuchsia-950/35" : "",
+          )}
+        >
+          <div
+            className={cn(
+              "max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-[2rem] bg-mist p-5 shadow-panel sm:max-h-[calc(100dvh-3rem)] sm:p-6",
+              birthdayMode
+                ? "border border-fuchsia-200/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(253,242,248,0.96),rgba(254,249,195,0.88),rgba(224,231,255,0.9))] shadow-[0_24px_70px_rgba(236,72,153,0.25)]"
+                : "",
+            )}
+          >
             <Badge tone="accent">Team setup</Badge>
             <div className="mt-4">
               <SectionHeading
