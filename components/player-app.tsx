@@ -44,6 +44,42 @@ function formatTierLabel(tier: string) {
   }
 }
 
+function getBoardTileStatus(card: PlayerState["board"][number]) {
+  if (card.isActiveChallengeTask) {
+    return {
+      label: "Live",
+      className: "bg-sea text-white ring-1 ring-sea/20",
+    };
+  }
+
+  switch (card.completionTier) {
+    case "platinum":
+      return {
+        label: "Diamond",
+        className: "bg-cyan-100 text-cyan-900 ring-1 ring-cyan-200",
+      };
+    case "gold":
+      return {
+        label: "Gold",
+        className: "bg-amber-100 text-amber-900 ring-1 ring-amber-200",
+      };
+    case "base":
+      return {
+        label: "Done",
+        className: "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200",
+      };
+    default:
+      return {
+        label: "Open",
+        className: "bg-white/90 text-ink/70 ring-1 ring-ink/10",
+      };
+  }
+}
+
+function getBoardTileTypeLabel(type: PlayerState["board"][number]["type"]) {
+  return type === "competitive" ? "VS" : "CO";
+}
+
 function formatStars(value: number) {
   return Number.isInteger(value) ? `${value}` : value.toFixed(1);
 }
@@ -85,6 +121,71 @@ function ProgressPill({
     >
       {children}
     </span>
+  );
+}
+
+function BoardTile({
+  card,
+  index,
+  onClick,
+}: {
+  card: PlayerState["board"][number];
+  index: number;
+  onClick: () => void;
+}) {
+  const status = getBoardTileStatus(card);
+
+  return (
+    <button
+      type="button"
+      className={cn(
+        "group aspect-square min-w-0 overflow-hidden rounded-[1.2rem] border p-2 text-left transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sea/60 md:rounded-[1.35rem] md:p-3",
+        tierClasses(card.completionTier),
+        card.isActiveChallengeTask ? "ring-2 ring-sea/60" : "",
+      )}
+      onClick={onClick}
+    >
+      <div className="flex h-full min-w-0 flex-col">
+        <div className="flex items-start justify-between gap-2">
+          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-white/85 px-2 text-[10px] font-semibold text-ink/65 ring-1 ring-ink/10">
+            {index + 1}
+          </span>
+          <span
+            className={cn(
+              "inline-flex h-6 min-w-6 items-center justify-center rounded-full px-2 text-[10px] font-semibold uppercase tracking-[0.14em] ring-1",
+              card.type === "competitive"
+                ? "bg-coral/10 text-coral ring-coral/20"
+                : "bg-mint/20 text-emerald-800 ring-emerald-200",
+            )}
+          >
+            {getBoardTileTypeLabel(card.type)}
+          </span>
+        </div>
+
+        <div className="mt-2 min-w-0 flex-1">
+          <p className="line-clamp-2 break-words text-[13px] font-semibold leading-tight text-ink [overflow-wrap:anywhere] md:text-[15px]">
+            {card.title}
+          </p>
+        </div>
+
+        <div className="mt-2 flex items-end justify-between gap-2">
+          <span
+            className={cn(
+              "inline-flex max-w-full items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]",
+              status.className,
+            )}
+          >
+            <span className="truncate">{status.label}</span>
+          </span>
+          {card.isActiveChallengeTask ? (
+            <span className="relative mb-1 mr-0.5 flex h-2.5 w-2.5 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sea/45" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-sea" />
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -758,40 +859,12 @@ export function PlayerApp({
         </div>
         <div className="grid min-w-0 grid-cols-4 gap-2 md:gap-3">
           {state.board.map((card, index) => (
-            <button
+            <BoardTile
               key={card.taskId}
-              type="button"
-              className={cn(
-                "aspect-square min-w-0 overflow-hidden rounded-[1.2rem] border p-2 text-left transition hover:-translate-y-0.5 md:rounded-[1.35rem] md:p-3",
-                tierClasses(card.completionTier),
-                card.isActiveChallengeTask ? "ring-2 ring-sea/60" : "",
-              )}
+              card={card}
+              index={index}
               onClick={() => setSelectedTaskId(card.taskId)}
-            >
-              <div className="flex h-full min-w-0 flex-col justify-between">
-                <div className="flex items-start justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink/50">
-                  <span>{index + 1}</span>
-                  <span>{card.type === "competitive" ? "vs" : "co-op"}</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="line-clamp-3 break-words text-sm font-semibold leading-tight text-ink [overflow-wrap:anywhere] md:text-[15px]">
-                    {card.title}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="break-words text-[11px] text-ink/65 [overflow-wrap:anywhere] md:text-xs">
-                    {card.completionTier === "none"
-                      ? "Open"
-                      : `${formatTierLabel(card.completionTier)} • W${card.winCount}/L${card.lossCount}`}
-                  </p>
-                  {card.isActiveChallengeTask ? (
-                    <span className="inline-flex rounded-full bg-sea px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white">
-                      Live
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            </button>
+            />
           ))}
         </div>
       </div>
