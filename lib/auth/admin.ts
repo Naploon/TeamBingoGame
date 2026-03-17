@@ -1,7 +1,33 @@
 import { redirect } from "next/navigation";
+import { and, eq } from "drizzle-orm";
 
-import { env } from "@/lib/env";
+import { db } from "@/lib/db";
+import { adminUsers } from "@/lib/db/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+function normalizeAdminEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+async function getActiveAdminAccount(email: string) {
+  const emailKey = normalizeAdminEmail(email);
+
+  if (!emailKey) {
+    return null;
+  }
+
+  return db.query.adminUsers.findFirst({
+    where: and(eq(adminUsers.emailKey, emailKey), eq(adminUsers.isActive, true)),
+    columns: {
+      id: true,
+      email: true,
+    },
+  });
+}
+
+export async function canAdminSignIn(email: string) {
+  return Boolean(await getActiveAdminAccount(email));
+}
 
 export async function getAdminUser() {
   const supabase = createSupabaseServerClient();
@@ -13,8 +39,8 @@ export async function getAdminUser() {
     return null;
   }
 
-  const allowlist = env.adminAllowlist();
-  if (allowlist.length > 0 && !allowlist.includes(user.email.toLowerCase())) {
+  const adminAccount = await getActiveAdminAccount(user.email);
+  if (!adminAccount) {
     return null;
   }
 

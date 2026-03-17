@@ -127,6 +127,21 @@ export const playerSessions = pgTable(
   }),
 );
 
+export const adminUsers = pgTable(
+  "admin_users",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    email: text("email").notNull(),
+    emailKey: text("email_key").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    emailKeyIdx: uniqueIndex("admin_users_email_key_idx").on(table.emailKey),
+  }),
+);
+
 export const taskTemplates = pgTable("task_templates", {
   id: uuid("id").defaultRandom().primaryKey(),
   title: text("title").notNull(),
@@ -249,6 +264,7 @@ export type GameInstanceRecord = typeof gameInstances.$inferSelect;
 export type TeamRecord = typeof teams.$inferSelect;
 export type PlayerRegistrationRecord = typeof playerRegistrations.$inferSelect;
 export type PlayerSessionRecord = typeof playerSessions.$inferSelect;
+export type AdminUserRecord = typeof adminUsers.$inferSelect;
 export type TaskTemplateRecord = typeof taskTemplates.$inferSelect;
 export type TaskRecord = typeof tasks.$inferSelect;
 export type TeamTaskStateRecord = typeof teamTaskStates.$inferSelect;
