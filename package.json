@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:clean": "rm -rf .next && next dev",
+    "dev:reset": "sh -c 'pids=$(lsof -tiTCP:3000-3006 -sTCP:LISTEN 2>/dev/null || true); if [ -n \"$pids\" ]; then kill $pids; fi; rm -rf .next; exec next dev'",
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
@@ -23,6 +24,9 @@
     "pg": "^8.13.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-breaks": "^4.0.0",
+    "remark-gfm": "^4.0.1",
     "zod": "^3.24.2"
   },
   "devDependencies": {

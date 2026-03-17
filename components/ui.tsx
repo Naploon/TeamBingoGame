@@ -8,6 +8,9 @@ import type {
 
 import { cn } from "@/lib/utils";
 
+const selectChevron =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23475569' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 8 4 4 4-4'/%3E%3C/svg%3E\")";
+
 export function AppSurface({
   children,
   className,
@@ -88,6 +91,25 @@ export function Badge({
   );
 }
 
+export function JoinCodeBadge({
+  code,
+  className,
+}: {
+  code: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-full bg-ink px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-white shadow-sm ring-1 ring-white/20",
+        className,
+      )}
+    >
+      {code}
+    </span>
+  );
+}
+
 export function Button({
   className,
   children,
@@ -144,14 +166,22 @@ export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
 export function Select({
   className,
   children,
+  style,
   ...props
 }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       className={cn(
-        "min-h-11 w-full rounded-2xl border border-ink/10 bg-white px-4 py-3 text-base text-ink shadow-sm outline-none transition focus:border-sea/40 focus:ring-2 focus:ring-sea/15 sm:text-sm",
+        "min-h-11 w-full appearance-none rounded-2xl border border-ink/10 bg-white px-4 py-3 pr-10 text-base text-ink shadow-sm outline-none transition focus:border-sea/40 focus:ring-2 focus:ring-sea/15 sm:text-sm",
         className,
       )}
+      style={{
+        backgroundImage: selectChevron,
+        backgroundPosition: "right 1rem center",
+        backgroundRepeat: "no-repeat",
+        backgroundSize: "1rem",
+        ...style,
+      }}
       {...props}
     >
       {children}

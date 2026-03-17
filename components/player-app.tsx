@@ -3,8 +3,9 @@
 import { useEffect, useId, useState } from "react";
 import type { FormEvent } from "react";
 
+import { MarkdownContent } from "@/components/markdown-content";
 import { PlayerSignOutButton } from "@/components/player-sign-out-button";
-import { Badge, Button, Input, Panel, SectionHeading, Select, Textarea } from "@/components/ui";
+import { Badge, Button, Input, JoinCodeBadge, Panel, SectionHeading, Select, Textarea } from "@/components/ui";
 import type { getPlayerState } from "@/lib/game/service";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +40,41 @@ function formatTierLabel(tier: string) {
 
 function formatStars(value: number) {
   return Number.isInteger(value) ? `${value}` : value.toFixed(1);
+}
+
+function progressPillClasses(kind: "rank" | "win" | "loss", value?: string) {
+  if (kind === "win") {
+    return "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200";
+  }
+
+  if (kind === "loss") {
+    return "bg-rose-100 text-rose-800 ring-1 ring-rose-200";
+  }
+
+  switch (value) {
+    case "base":
+      return "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200";
+    case "gold":
+      return "bg-amber-100 text-amber-900 ring-1 ring-amber-200";
+    case "platinum":
+      return "bg-cyan-100 text-cyan-900 ring-1 ring-cyan-200 shadow-[0_0_18px_rgba(34,211,238,0.22)]";
+    default:
+      return "bg-ink/5 text-ink/65 ring-1 ring-ink/10";
+  }
+}
+
+function ProgressPill({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className: string;
+}) {
+  return (
+    <span className={cn("inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]", className)}>
+      {children}
+    </span>
+  );
 }
 
 function getPlayerViewLabel(view: PlayerView) {
@@ -464,10 +500,14 @@ export function PlayerApp({
               title={state.event.title}
               description={
                 state.team
-                  ? `${titleTeam} is ready. Join code ${state.event.joinCode}.`
+                  ? `${titleTeam} is ready.`
                   : "You are registered. Teams will appear when the admin starts the event."
               }
             />
+            <div className="flex flex-wrap items-center gap-2 text-sm text-ink/70">
+              <span>Join code</span>
+              <JoinCodeBadge code={state.event.joinCode} />
+            </div>
           </div>
           <div className="rounded-3xl bg-ink p-4 text-white shadow-panel">
             <p className="text-xs uppercase tracking-[0.24em] text-white/65">You</p>
@@ -522,6 +562,14 @@ export function PlayerApp({
                   <div>
                     <p className="text-sm text-ink/55">#{index + 1}</p>
                     <p className="font-semibold text-ink">{team.teamName}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <ProgressPill className={progressPillClasses("rank", "gold")}>
+                        Gold {team.goldCount}
+                      </ProgressPill>
+                      <ProgressPill className={progressPillClasses("rank", "platinum")}>
+                        Diamond {team.platinumCount}
+                      </ProgressPill>
+                    </div>
                   </div>
                   <p className="text-lg font-semibold text-ink">{team.completedCount}</p>
                 </div>
@@ -570,18 +618,15 @@ export function PlayerApp({
                       onClick={() => setSelectedTaskId(card.taskId)}
                     >
                       <div className="flex h-full min-w-0 flex-col justify-between">
-                        <p className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-ink/50">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink/50">
                           {index + 1}
                         </p>
                         <div className="min-w-0">
-                          <p className="line-clamp-2 text-sm font-semibold leading-tight text-ink md:text-[15px]">
+                          <p className="line-clamp-3 break-words text-sm font-semibold leading-tight text-ink [overflow-wrap:anywhere] md:text-[15px]">
                             {card.title}
                           </p>
-                          <p className="mt-1 truncate text-[11px] text-ink/60 md:text-xs">
-                            {card.type === "competitive" ? "Vs task" : "Shared task"}
-                          </p>
                         </div>
-                        <p className="truncate text-[11px] text-ink/65 md:text-xs">
+                        <p className="break-words text-[11px] text-ink/65 [overflow-wrap:anywhere] md:text-xs">
                           {card.completionTier === "none"
                             ? "Open"
                             : `${formatTierLabel(card.completionTier)} • W${card.winCount}/L${card.lossCount}`}
@@ -706,9 +751,14 @@ export function PlayerApp({
                       <div>
                         <p className="text-xs uppercase tracking-[0.22em] text-ink/45">#{index + 1}</p>
                         <p className="text-lg font-semibold text-ink">{team.teamName}</p>
-                        <p className="text-xs text-ink/55">
-                          Gold {team.goldCount} • Diamond {team.platinumCount}
-                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <ProgressPill className={progressPillClasses("rank", "gold")}>
+                            Gold {team.goldCount}
+                          </ProgressPill>
+                          <ProgressPill className={progressPillClasses("rank", "platinum")}>
+                            Diamond {team.platinumCount}
+                          </ProgressPill>
+                        </div>
                       </div>
                       <p className="text-2xl font-semibold text-ink">{team.completedCount}</p>
                     </div>
@@ -781,9 +831,14 @@ export function PlayerApp({
                       </div>
                       <p className="text-xl font-semibold text-ink">{team.completedCount}</p>
                     </div>
-                    <p className="mt-2 text-xs text-ink/55">
-                      Gold {team.goldCount} • Diamond {team.platinumCount}
-                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <ProgressPill className={progressPillClasses("rank", "gold")}>
+                        Gold {team.goldCount}
+                      </ProgressPill>
+                      <ProgressPill className={progressPillClasses("rank", "platinum")}>
+                        Diamond {team.platinumCount}
+                      </ProgressPill>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -834,30 +889,39 @@ export function PlayerApp({
 
                 <div className="space-y-4 px-4 pb-[calc(env(safe-area-inset-bottom)+24px)] sm:px-6 sm:pb-6">
                   <div className="rounded-3xl bg-white/80 p-5">
-                  {selectedTask.imageUrl ? (
-                    <img
-                      src={selectedTask.imageUrl}
-                      alt={selectedTask.title}
-                      className="h-52 w-full rounded-3xl object-cover sm:h-64"
-                    />
-                  ) : null}
-                  <p className="text-sm leading-6 text-ink/80">{selectedTask.fullDescription}</p>
-                  <p className="mt-4 text-xs uppercase tracking-[0.22em] text-ink/45">
-                    Progress: {formatTierLabel(selectedTask.completionTier)} • Wins {selectedTask.winCount} • Losses{" "}
-                    {selectedTask.lossCount}
-                  </p>
-                  {selectedTask.ratingCount > 0 ? (
-                    <div className="mt-3 flex items-center gap-3">
-                      <StarRatingDisplay value={selectedTask.ratingAverage ?? 0} size="sm" />
-                      <p className="text-xs uppercase tracking-[0.22em] text-ink/45">
-                        {selectedTask.ratingAverage?.toFixed(1)} from {selectedTask.ratingCount} ratings
-                      </p>
+                    {selectedTask.imageUrl ? (
+                      <img
+                        src={selectedTask.imageUrl}
+                        alt={selectedTask.title}
+                        className="h-52 w-full rounded-3xl object-cover sm:h-64"
+                      />
+                    ) : null}
+                    <MarkdownContent content={selectedTask.fullDescription} className="text-ink/80" />
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <ProgressPill className={progressPillClasses("rank", selectedTask.completionTier)}>
+                        {selectedTask.completionTier === "none"
+                          ? "Open"
+                          : `Rank ${formatTierLabel(selectedTask.completionTier)}`}
+                      </ProgressPill>
+                      <ProgressPill className={progressPillClasses("win")}>
+                        Wins {selectedTask.winCount}
+                      </ProgressPill>
+                      <ProgressPill className={progressPillClasses("loss")}>
+                        Losses {selectedTask.lossCount}
+                      </ProgressPill>
                     </div>
-                  ) : (
-                    <p className="mt-2 text-xs uppercase tracking-[0.22em] text-ink/45">
-                      Rating: No ratings yet
-                    </p>
-                  )}
+                    {selectedTask.ratingCount > 0 ? (
+                      <div className="mt-3 flex items-center gap-3">
+                        <StarRatingDisplay value={selectedTask.ratingAverage ?? 0} size="sm" />
+                        <p className="text-xs uppercase tracking-[0.22em] text-ink/45">
+                          {selectedTask.ratingAverage?.toFixed(1)} from {selectedTask.ratingCount} ratings
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-xs uppercase tracking-[0.22em] text-ink/45">
+                        Rating: No ratings yet
+                      </p>
+                    )}
                   </div>
 
                   {selectedTask.lastLossOpponentTeamId ? (

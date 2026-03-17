@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { JoinCodeForm } from "@/components/join-code-form";
 import { PlayerSignOutButton } from "@/components/player-sign-out-button";
-import { AppSurface, Badge, Button, Panel, SectionHeading } from "@/components/ui";
+import { AppSurface, Badge, Button, JoinCodeBadge, Panel, SectionHeading } from "@/components/ui";
 import { getPlayerAuthUser } from "@/lib/auth/player";
 import { getLandingPlayerRegistration } from "@/lib/game/service";
 
@@ -63,8 +63,12 @@ export default async function HomePage({
               <p className="text-sm uppercase tracking-[0.24em] text-white/60">Saved player account</p>
               <p className="mt-3 text-2xl font-semibold">{returningRegistration.event.title}</p>
               <p className="mt-2 text-sm text-white/75">
-                Continue as {returningRegistration.player.displayName}. Join code {returningRegistration.event.joinCode}.
+                Continue as {returningRegistration.player.displayName}.
               </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-white/75">
+                <span>Join code</span>
+                <JoinCodeBadge code={returningRegistration.event.joinCode} />
+              </div>
               {playerUser?.email ? <p className="mt-2 text-sm text-white/60">{playerUser.email}</p> : null}
               <p className="mt-3 text-sm text-white/75">
                 {getResumeDescription(

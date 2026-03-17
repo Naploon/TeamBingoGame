@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
-import { Badge, Button, Input, Panel, SectionHeading } from "@/components/ui";
+import { Badge, Button, Input, JoinCodeBadge, Panel, SectionHeading } from "@/components/ui";
 import type { listEvents } from "@/lib/game/service";
 
 type AdminEvents = Awaited<ReturnType<typeof listEvents>>;
@@ -88,7 +88,10 @@ export function AdminIndex({ initialEvents }: { initialEvents: AdminEvents }) {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-lg font-semibold text-ink">{event.title}</p>
-                  <p className="mt-1 text-sm text-ink/60">Join code {event.joinCode}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink/60">
+                    <span>Join code</span>
+                    <JoinCodeBadge code={event.joinCode} />
+                  </div>
                 </div>
                 <Badge tone={event.status === "live" ? "accent" : "default"}>
                   {event.status.replace("_", " ")}

@@ -7,7 +7,7 @@ import { PlayerSignOutButton } from "@/components/player-sign-out-button";
 import { Button } from "@/components/ui";
 import { getPlayerAuthUser } from "@/lib/auth/player";
 import { AppError, getJoinEvent, resumePlayerRegistration } from "@/lib/game/service";
-import { AppSurface, Badge, Panel, SectionHeading } from "@/components/ui";
+import { AppSurface, Badge, JoinCodeBadge, Panel, SectionHeading } from "@/components/ui";
 import { RegisterPlayerForm } from "@/components/register-player-form";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +42,10 @@ export default async function JoinEventPage({
               description="Check the code with the organizer and try again. If the game was just created, make sure you received the latest join code."
             />
           </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-ink/70">
+            <span>Tried code</span>
+            <JoinCodeBadge code={joinCode} />
+          </div>
           <div className="mt-6 rounded-[1.75rem] bg-ink/5 p-4">
             <JoinCodeForm initialJoinCode={joinCode} submitLabel="Try another code" />
           </div>
@@ -71,7 +75,10 @@ export default async function JoinEventPage({
   return (
     <AppSurface className="flex items-center justify-center">
       <Panel className="w-full max-w-xl">
-        <Badge tone="accent">Join {event.joinCode}</Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone="accent">Join event</Badge>
+          <JoinCodeBadge code={event.joinCode} />
+        </div>
         <div className="mt-4">
           <SectionHeading
             eyebrow="Player registration"

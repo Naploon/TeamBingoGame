@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { Badge, Button, Input, Panel, SectionHeading, Select, Textarea } from "@/components/ui";
+import { MarkdownContent } from "@/components/markdown-content";
+import { Badge, Button, Input, JoinCodeBadge, Panel, SectionHeading, Select, Textarea } from "@/components/ui";
 import type { getAdminEventState } from "@/lib/game/service";
 
 type AdminState = Awaited<ReturnType<typeof getAdminEventState>>;
 type TaskType = "competitive" | "cooperative";
+type AdminTab = "challenges" | "tasks" | "people" | "standings" | "settings" | "audit";
 type ImageState = { imagePath: string; imageUrl: string };
 type DraftState = {
   title: string;
@@ -84,6 +86,7 @@ export function AdminDashboard({
   initialState: AdminState;
 }) {
   const [state, setState] = useState(initialState);
+  const [activeTab, setActiveTab] = useState<AdminTab>("challenges");
   const [eventTitle, setEventTitle] = useState(initialState.event.title);
   const [targetTeamSize, setTargetTeamSize] = useState(String(initialState.event.targetTeamSize));
   const [taskDraft, setTaskDraft] = useState<DraftState>(createEmptyTaskDraft());
@@ -249,6 +252,15 @@ export function AdminDashboard({
     return state.teams.find((team) => team.id === teamId)?.displayName ?? "Unknown team";
   }
 
+  const tabs: Array<{ id: AdminTab; label: string; count?: number }> = [
+    { id: "challenges", label: "Challenges", count: state.challenges.length },
+    { id: "tasks", label: "Tasks", count: state.tasks.length },
+    { id: "people", label: "People", count: state.registrations.length },
+    { id: "standings", label: "Standings", count: state.teams.length },
+    { id: "settings", label: "Settings" },
+    { id: "audit", label: "Audit", count: Math.min(state.auditLog.length, 12) },
+  ];
+
   return (
     <div className="space-y-6">
       <Panel className="bg-gradient-to-r from-white via-white to-sand/50">
@@ -260,8 +272,12 @@ export function AdminDashboard({
             <SectionHeading
               eyebrow="Admin control"
               title={state.event.title}
-              description={`Join code ${state.event.joinCode}. ${state.registrations.length} players registered.`}
+              description={`${state.registrations.length} players registered.`}
             />
+            <div className="flex flex-wrap items-center gap-2 text-sm text-ink/70">
+              <span>Join code</span>
+              <JoinCodeBadge code={state.event.joinCode} />
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             {state.event.status === "draft" ? (
@@ -327,127 +343,155 @@ export function AdminDashboard({
       {message ? <p className="rounded-2xl bg-mint/15 px-4 py-3 text-sm text-ink">{message}</p> : null}
       {error ? <p className="rounded-2xl bg-coral/15 px-4 py-3 text-sm text-coral">{error}</p> : null}
 
-      <Panel className="xl:p-8">
-        <SectionHeading
-          eyebrow="Challenges"
-          title="Live results and overrides"
-          description="This section is intentionally wider so you can actually read notes, compare both teams, and correct mistakes without cramped wrapping."
-        />
-        <div className="mt-6 space-y-4">
-          {state.challenges.length === 0 ? (
-            <p className="rounded-3xl bg-ink/5 px-4 py-4 text-sm text-ink/60">
-              No challenges have been created yet.
-            </p>
-          ) : null}
-          {state.challenges.map((challenge) => (
-            <form
-              key={challenge.id}
-              className="rounded-[2rem] border border-ink/8 bg-gradient-to-br from-white to-ink/5 p-5"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const formData = new FormData(event.currentTarget);
-                const winnerValue = String(formData.get("winnerTeamId") ?? "");
-                postJson(
-                  `/api/admin/events/${slug}/challenges/${challenge.id}/override`,
-                  {
-                    status: String(formData.get("status") ?? "resolved"),
-                    winnerTeamId: winnerValue ? winnerValue : null,
-                    note: String(formData.get("note") ?? ""),
-                  },
-                  `override_${challenge.id}`,
-                  "Challenge override saved.",
-                );
-              }}
+      <Panel className="overflow-hidden">
+        <div className="flex flex-wrap gap-2 rounded-full bg-ink/5 p-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={
+                activeTab === tab.id
+                  ? "min-h-11 rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white transition"
+                  : "min-h-11 rounded-full px-4 py-2 text-sm font-semibold text-ink/65 transition hover:bg-white/80"
+              }
+              onClick={() => setActiveTab(tab.id)}
             >
-              <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(360px,0.9fr)]">
-                <div className="space-y-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.24em] text-ink/45">{challenge.status}</p>
-                      <h3 className="mt-2 text-xl font-semibold text-ink">{challenge.taskTitle}</h3>
-                      <p className="mt-2 text-base text-ink/70">
-                        {getTeamName(challenge.challengerTeamId)} vs {getTeamName(challenge.opponentTeamId)}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge tone={challenge.type === "competitive" ? "warning" : "success"}>
-                        {challenge.type}
-                      </Badge>
-                      <Badge
-                        tone={
-                          challenge.status === "cancelled" || challenge.status === "failed"
-                            ? "danger"
-                            : "accent"
-                        }
-                      >
-                        {challenge.winnerTeamId ? `Winner: ${getTeamName(challenge.winnerTeamId)}` : "No winner"}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-2xl bg-white/80 px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.22em] text-ink/40">Created</p>
-                      <p className="mt-2 text-sm text-ink">{new Date(challenge.createdAt).toLocaleString("en-GB")}</p>
-                    </div>
-                    <div className="rounded-2xl bg-white/80 px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.22em] text-ink/40">Resolved</p>
-                      <p className="mt-2 text-sm text-ink">
-                        {challenge.resolvedAt
-                          ? new Date(challenge.resolvedAt).toLocaleString("en-GB")
-                          : "Still open"}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl bg-white/80 px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.22em] text-ink/40">Challenge id</p>
-                      <p className="mt-2 break-all text-sm text-ink/70">{challenge.id}</p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-3xl bg-white/80 p-4">
-                    <p className="text-xs uppercase tracking-[0.22em] text-ink/40">Current note</p>
-                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink/75">
-                      {challenge.note?.trim() ? challenge.note : "No note saved yet."}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="rounded-3xl border border-ink/8 bg-white/85 p-4">
-                  <p className="text-sm font-semibold text-ink">Override controls</p>
-                  <div className="mt-4 grid gap-3">
-                    <Select name="status" defaultValue={challenge.status}>
-                      <option value="resolved">Resolved</option>
-                      <option value="failed">Failed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </Select>
-                    <Select
-                      name="winnerTeamId"
-                      defaultValue={challenge.winnerTeamId ?? ""}
-                      disabled={challenge.type === "cooperative"}
-                    >
-                      <option value="">No winner</option>
-                      <option value={challenge.challengerTeamId}>{getTeamName(challenge.challengerTeamId)}</option>
-                      <option value={challenge.opponentTeamId}>{getTeamName(challenge.opponentTeamId)}</option>
-                    </Select>
-                    <Textarea
-                      name="note"
-                      className="min-h-[160px]"
-                      defaultValue={challenge.note ?? ""}
-                      placeholder="Explain why you are overriding the result, what happened, and what players should know."
-                    />
-                    <Button type="submit" disabled={busyAction === `override_${challenge.id}`}>
-                      {busyAction === `override_${challenge.id}` ? "Saving..." : "Apply override"}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </form>
+              {tab.label}
+              {typeof tab.count === "number" ? ` (${tab.count})` : ""}
+            </button>
           ))}
         </div>
       </Panel>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
-        <div className="space-y-6">
+      <div className="space-y-6">
+        {activeTab === "challenges" ? (
+          <Panel className="xl:p-8">
+            <SectionHeading
+              eyebrow="Challenges"
+              title="Live results and overrides"
+              description="Override notes, winners, and statuses live without squeezing the context beside unrelated admin sections."
+            />
+            <div className="mt-6 space-y-4">
+              {state.challenges.length === 0 ? (
+                <p className="rounded-3xl bg-ink/5 px-4 py-4 text-sm text-ink/60">
+                  No challenges have been created yet.
+                </p>
+              ) : null}
+              {state.challenges.map((challenge) => (
+                <form
+                  key={challenge.id}
+                  className="rounded-[2rem] border border-ink/8 bg-gradient-to-br from-white to-ink/5 p-5"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const formData = new FormData(event.currentTarget);
+                    const winnerValue = String(formData.get("winnerTeamId") ?? "");
+                    postJson(
+                      `/api/admin/events/${slug}/challenges/${challenge.id}/override`,
+                      {
+                        status: String(formData.get("status") ?? "resolved"),
+                        winnerTeamId: winnerValue ? winnerValue : null,
+                        note: String(formData.get("note") ?? ""),
+                      },
+                      `override_${challenge.id}`,
+                      "Challenge override saved.",
+                    );
+                  }}
+                >
+                  <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(360px,0.9fr)]">
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.24em] text-ink/45">{challenge.status}</p>
+                          <h3 className="mt-2 text-xl font-semibold text-ink">{challenge.taskTitle}</h3>
+                          <p className="mt-2 text-base text-ink/70">
+                            {getTeamName(challenge.challengerTeamId)} vs {getTeamName(challenge.opponentTeamId)}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge tone={challenge.type === "competitive" ? "warning" : "success"}>
+                            {challenge.type}
+                          </Badge>
+                          <Badge
+                            tone={
+                              challenge.status === "cancelled" || challenge.status === "failed"
+                                ? "danger"
+                                : "accent"
+                            }
+                          >
+                            {challenge.winnerTeamId ? `Winner: ${getTeamName(challenge.winnerTeamId)}` : "No winner"}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div className="rounded-2xl bg-white/80 px-4 py-3">
+                          <p className="text-xs uppercase tracking-[0.22em] text-ink/40">Created</p>
+                          <p className="mt-2 text-sm text-ink">
+                            {new Date(challenge.createdAt).toLocaleString("en-GB")}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl bg-white/80 px-4 py-3">
+                          <p className="text-xs uppercase tracking-[0.22em] text-ink/40">Resolved</p>
+                          <p className="mt-2 text-sm text-ink">
+                            {challenge.resolvedAt
+                              ? new Date(challenge.resolvedAt).toLocaleString("en-GB")
+                              : "Still open"}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl bg-white/80 px-4 py-3">
+                          <p className="text-xs uppercase tracking-[0.22em] text-ink/40">Challenge id</p>
+                          <p className="mt-2 break-all text-sm text-ink/70">{challenge.id}</p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-3xl bg-white/80 p-4">
+                        <p className="text-xs uppercase tracking-[0.22em] text-ink/40">Current note</p>
+                        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink/75">
+                          {challenge.note?.trim() ? challenge.note : "No note saved yet."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-ink/8 bg-white/85 p-4">
+                      <p className="text-sm font-semibold text-ink">Override controls</p>
+                      <div className="mt-4 grid gap-3">
+                        <Select name="status" defaultValue={challenge.status}>
+                          <option value="resolved">Resolved</option>
+                          <option value="failed">Failed</option>
+                          <option value="cancelled">Cancelled</option>
+                        </Select>
+                        <Select
+                          name="winnerTeamId"
+                          defaultValue={challenge.winnerTeamId ?? ""}
+                          disabled={challenge.type === "cooperative"}
+                        >
+                          <option value="">No winner</option>
+                          <option value={challenge.challengerTeamId}>
+                            {getTeamName(challenge.challengerTeamId)}
+                          </option>
+                          <option value={challenge.opponentTeamId}>
+                            {getTeamName(challenge.opponentTeamId)}
+                          </option>
+                        </Select>
+                        <Textarea
+                          name="note"
+                          className="min-h-[160px]"
+                          defaultValue={challenge.note ?? ""}
+                          placeholder="Explain why you are overriding the result, what happened, and what players should know."
+                        />
+                        <Button type="submit" disabled={busyAction === `override_${challenge.id}`}>
+                          {busyAction === `override_${challenge.id}` ? "Saving..." : "Apply override"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </form>
+              ))}
+            </div>
+          </Panel>
+        ) : null}
+
+        {activeTab === "settings" ? (
           <Panel>
             <SectionHeading
               eyebrow="Settings"
@@ -482,7 +526,9 @@ export function AdminDashboard({
               </Button>
             </form>
           </Panel>
+        ) : null}
 
+        {activeTab === "tasks" ? (
           <Panel>
             <SectionHeading
               eyebrow="Tasks"
@@ -522,13 +568,14 @@ export function AdminDashboard({
                     required
                   />
                   <Textarea
-                    placeholder="Full description"
+                    placeholder="Full description (Markdown supported)"
                     value={taskDraft.fullDescription}
                     onChange={(event) =>
                       setTaskDraft((current) => ({ ...current, fullDescription: event.target.value }))
                     }
                     required
                   />
+                  <p className="text-xs text-ink/45">Supports Markdown like headings, lists, bold text, links, and code blocks.</p>
 
                   <div className="grid gap-3">
                     <ImagePreview imageUrl={taskDraft.imageUrl} alt="Task draft preview" />
@@ -617,7 +664,7 @@ export function AdminDashboard({
                               {template.type}
                             </Badge>
                           </div>
-                          <p className="text-sm leading-6 text-ink/70">{template.fullDescription}</p>
+                          <MarkdownContent content={template.fullDescription} className="text-ink/70" />
                           <p className="text-xs uppercase tracking-[0.22em] text-ink/40">
                             Updated {new Date(template.updatedAt).toLocaleDateString("en-GB")}
                           </p>
@@ -691,13 +738,14 @@ export function AdminDashboard({
                   required
                 />
                 <Textarea
-                  placeholder="Full description"
+                  placeholder="Full description (Markdown supported)"
                   value={templateDraft.fullDescription}
                   onChange={(event) =>
                     setTemplateDraft((current) => ({ ...current, fullDescription: event.target.value }))
                   }
                   required
                 />
+                <p className="text-xs text-ink/45">Supports Markdown like headings, lists, bold text, links, and code blocks.</p>
                 <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
                   <ImagePreview imageUrl={templateDraft.imageUrl} alt="Template preview" />
                   <div className="grid gap-3">
@@ -808,7 +856,14 @@ export function AdminDashboard({
                     >
                       <Input name="title" defaultValue={task.title} />
                       <Input name="shortDescription" defaultValue={task.shortDescription} />
-                      <Textarea name="fullDescription" defaultValue={task.fullDescription} />
+                      <Textarea
+                        name="fullDescription"
+                        defaultValue={task.fullDescription}
+                        placeholder="Full description (Markdown supported)"
+                      />
+                      <p className="text-xs text-ink/45">
+                        Supports Markdown like headings, lists, bold text, links, and code blocks.
+                      </p>
 
                       <input type="hidden" name="imagePath" value={taskImage.imagePath} readOnly />
                       <input type="hidden" name="imageUrl" value={taskImage.imageUrl} readOnly />
@@ -846,10 +901,7 @@ export function AdminDashboard({
                             tone="secondary"
                             disabled={busyAction === `save_template_${task.id}`}
                             onClick={() => {
-                              const suggestedTitle = window.prompt(
-                                "Template title",
-                                `${task.title}`,
-                              );
+                              const suggestedTitle = window.prompt("Template title", `${task.title}`);
 
                               if (suggestedTitle === null) {
                                 return;
@@ -890,61 +942,124 @@ export function AdminDashboard({
               })}
             </div>
           </Panel>
-        </div>
+        ) : null}
 
-        <div className="space-y-6">
-          <Panel>
-            <SectionHeading
-              eyebrow="Registrations"
-              title={`${state.registrations.length} players`}
-              description={
-                canManageRegistrations
-                  ? "Players appear here as soon as they register. You can remove registrations before the game starts."
-                  : "Player removals lock once the game has started."
-              }
-            />
-            <div className="mt-5 space-y-3">
-              {state.registrations.length === 0 ? (
-                <p className="rounded-2xl bg-ink/5 px-4 py-3 text-sm text-ink/60">
-                  No players have registered yet.
-                </p>
-              ) : null}
-              {state.registrations.map((player) => (
-                <div
-                  key={player.id}
-                  className="flex items-center justify-between gap-4 rounded-2xl bg-ink/5 px-4 py-3"
-                >
-                  <div>
-                    <p className="font-medium text-ink">{player.displayName}</p>
-                    <p className="text-sm text-ink/55">
-                      {player.email ? `${player.email} • ` : ""}
-                      {player.teamId ? "Assigned" : "Waiting"}
-                    </p>
+        {activeTab === "people" ? (
+          <>
+            <Panel>
+              <SectionHeading
+                eyebrow="Registrations"
+                title={`${state.registrations.length} players`}
+                description={
+                  canManageRegistrations
+                    ? "Players appear here as soon as they register. You can remove registrations before the game starts."
+                    : "Player removals lock once the game has started."
+                }
+              />
+              <div className="mt-5 space-y-3">
+                {state.registrations.length === 0 ? (
+                  <p className="rounded-2xl bg-ink/5 px-4 py-3 text-sm text-ink/60">
+                    No players have registered yet.
+                  </p>
+                ) : null}
+                {state.registrations.map((player) => (
+                  <div
+                    key={player.id}
+                    className="flex items-center justify-between gap-4 rounded-2xl bg-ink/5 px-4 py-3"
+                  >
+                    <div>
+                      <p className="font-medium text-ink">{player.displayName}</p>
+                      <p className="text-sm text-ink/55">
+                        {player.email ? `${player.email} • ` : ""}
+                        {player.teamId ? "Assigned" : "Waiting"}
+                      </p>
+                    </div>
+                    {canManageRegistrations ? (
+                      <Button
+                        tone="danger"
+                        disabled={busyAction === `remove_registration_${player.id}`}
+                        onClick={() => {
+                          if (!window.confirm(`Remove ${player.displayName} from this event?`)) {
+                            return;
+                          }
+
+                          deleteJson(
+                            `/api/admin/events/${slug}/registrations/${player.id}`,
+                            `remove_registration_${player.id}`,
+                            "Player removed.",
+                          );
+                        }}
+                      >
+                        {busyAction === `remove_registration_${player.id}` ? "Removing..." : "Remove"}
+                      </Button>
+                    ) : null}
                   </div>
-                  {canManageRegistrations ? (
-                    <Button
-                      tone="danger"
-                      disabled={busyAction === `remove_registration_${player.id}`}
-                      onClick={() => {
-                        if (!window.confirm(`Remove ${player.displayName} from this event?`)) {
-                          return;
-                        }
+                ))}
+              </div>
+            </Panel>
 
-                        deleteJson(
-                          `/api/admin/events/${slug}/registrations/${player.id}`,
-                          `remove_registration_${player.id}`,
-                          "Player removed.",
-                        );
-                      }}
-                    >
-                      {busyAction === `remove_registration_${player.id}` ? "Removing..." : "Remove"}
-                    </Button>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </Panel>
+            <Panel>
+              <SectionHeading
+                eyebrow="Teams"
+                title={`${state.teams.length} teams`}
+                description="Switch captains instantly if you need to rebalance leadership."
+              />
+              <div className="mt-5 space-y-4">
+                {state.teams.map((team) => (
+                  <form
+                    key={team.id}
+                    className="rounded-3xl bg-ink/5 p-4"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      const formData = new FormData(event.currentTarget);
+                      postJson(
+                        `/api/admin/events/${slug}/captain`,
+                        {
+                          teamId: team.id,
+                          playerId: String(formData.get("playerId") ?? ""),
+                        },
+                        `captain_${team.id}`,
+                      );
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="font-semibold text-ink">{team.displayName}</p>
+                        <p className="text-sm text-ink/60">{team.completedCount} tasks completed</p>
+                      </div>
+                      <Badge tone="accent">{team.members.length} members</Badge>
+                    </div>
+                    <div className="mt-4 space-y-2">
+                      {team.members.map((member) => (
+                        <div
+                          key={member.id}
+                          className="flex items-center justify-between rounded-2xl bg-white/75 px-4 py-3"
+                        >
+                          <p className="font-medium text-ink">{member.displayName}</p>
+                          {member.isCaptain ? <Badge tone="accent">Captain</Badge> : null}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
+                      <Select name="playerId" defaultValue={team.captainPlayerId ?? undefined}>
+                        {team.members.map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.displayName}
+                          </option>
+                        ))}
+                      </Select>
+                      <Button type="submit" disabled={busyAction === `captain_${team.id}`}>
+                        {busyAction === `captain_${team.id}` ? "Switching..." : "Switch captain"}
+                      </Button>
+                    </div>
+                  </form>
+                ))}
+              </div>
+            </Panel>
+          </>
+        ) : null}
 
+        {activeTab === "standings" ? (
           <Panel>
             <SectionHeading
               eyebrow="Leaderboard"
@@ -968,66 +1083,9 @@ export function AdminDashboard({
               ))}
             </div>
           </Panel>
+        ) : null}
 
-          <Panel>
-            <SectionHeading
-              eyebrow="Teams"
-              title={`${state.teams.length} teams`}
-              description="Switch captains instantly if you need to rebalance leadership."
-            />
-            <div className="mt-5 space-y-4">
-              {state.teams.map((team) => (
-                <form
-                  key={team.id}
-                  className="rounded-3xl bg-ink/5 p-4"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    const formData = new FormData(event.currentTarget);
-                    postJson(
-                      `/api/admin/events/${slug}/captain`,
-                      {
-                        teamId: team.id,
-                        playerId: String(formData.get("playerId") ?? ""),
-                      },
-                      `captain_${team.id}`,
-                    );
-                  }}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="font-semibold text-ink">{team.displayName}</p>
-                      <p className="text-sm text-ink/60">{team.completedCount} tasks completed</p>
-                    </div>
-                    <Badge tone="accent">{team.members.length} members</Badge>
-                  </div>
-                  <div className="mt-4 space-y-2">
-                    {team.members.map((member) => (
-                      <div
-                        key={member.id}
-                        className="flex items-center justify-between rounded-2xl bg-white/75 px-4 py-3"
-                      >
-                        <p className="font-medium text-ink">{member.displayName}</p>
-                        {member.isCaptain ? <Badge tone="accent">Captain</Badge> : null}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
-                    <Select name="playerId" defaultValue={team.captainPlayerId ?? undefined}>
-                      {team.members.map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {member.displayName}
-                        </option>
-                      ))}
-                    </Select>
-                    <Button type="submit" disabled={busyAction === `captain_${team.id}`}>
-                      {busyAction === `captain_${team.id}` ? "Switching..." : "Switch captain"}
-                    </Button>
-                  </div>
-                </form>
-              ))}
-            </div>
-          </Panel>
-
+        {activeTab === "audit" ? (
           <Panel>
             <SectionHeading
               eyebrow="Audit"
@@ -1045,7 +1103,7 @@ export function AdminDashboard({
               ))}
             </div>
           </Panel>
-        </div>
+        ) : null}
       </div>
     </div>
   );
