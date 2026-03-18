@@ -9,6 +9,18 @@ const createPlayerAccountSchema = z.object({
   password: z.string().min(8).max(72),
 });
 
+function looksLikeExistingUserError(error: { message?: string; code?: string; status?: number }) {
+  const message = error.message?.toLowerCase() ?? "";
+
+  return (
+    message.includes("already registered") ||
+    message.includes("already been registered") ||
+    message.includes("already exists") ||
+    error.code === "email_exists" ||
+    error.status === 422
+  );
+}
+
 export async function POST(
   request: Request,
   { params }: { params: { joinCode: string } },
@@ -30,8 +42,11 @@ export async function POST(
     });
 
     if (error) {
-      if (error.message.toLowerCase().includes("already been registered")) {
-        const { data, error: listError } = await supabase.auth.admin.listUsers();
+      if (looksLikeExistingUserError(error)) {
+        const { data, error: listError } = await supabase.auth.admin.listUsers({
+          page: 1,
+          perPage: 1000,
+        });
 
         if (listError) {
           throw listError;
@@ -58,7 +73,7 @@ export async function POST(
 
         return jsonOk({
           message:
-            "This account already existed. Email confirmation has been skipped for this MVP, so you can sign in right away.",
+            "This account already exists. Email confirmation is already handled, so you can sign in right away.",
         });
       }
 
