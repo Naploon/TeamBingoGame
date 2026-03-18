@@ -55,7 +55,7 @@ export function RegisterPlayerForm({
         <Input
           value={displayName}
           onChange={(event) => setDisplayName(event.target.value)}
-          placeholder="What should the other teams call you?"
+          placeholder="Enter your real name"
           required
           disabled={disabled}
         />
