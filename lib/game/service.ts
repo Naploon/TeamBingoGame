@@ -1700,9 +1700,6 @@ export async function restartGame(slug: string, adminId: string) {
     throw new AppError("Only live or ended events can be restarted.");
   }
 
-  const { registrations, activeTasks } = await loadLaunchInputs(event.id);
-  validateLaunchInputs(event, registrations, activeTasks);
-
   return db.transaction(async (tx) => {
     await tx
       .update(playerRegistrations)
@@ -1714,7 +1711,16 @@ export async function restartGame(slug: string, adminId: string) {
 
     await tx.delete(teams).where(eq(teams.gameInstanceId, event.id));
 
-    const updatedEvent = await launchLiveGame(tx, event, registrations, activeTasks);
+    const [updatedEvent] = await tx
+      .update(gameInstances)
+      .set({
+        status: "registration_open",
+        startedAt: null,
+        endedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(gameInstances.id, event.id))
+      .returning();
 
     await writeAuditLog(tx, {
       adminId,

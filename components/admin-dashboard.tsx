@@ -319,7 +319,7 @@ export function AdminDashboard({
                 onClick={() => {
                   if (
                     !window.confirm(
-                      "Restart the game with the same players and tasks? This will reroll teams, boards, challenges, ratings, and team names.",
+                      "Reset the game back to registration with the same players and tasks? This will clear teams, boards, challenges, ratings, and locked team names until you start the game again.",
                     )
                   ) {
                     return;
@@ -329,7 +329,7 @@ export function AdminDashboard({
                     `/api/admin/events/${slug}/restart`,
                     {},
                     "restart_game",
-                    "Game restarted.",
+                    "Game reset to registration.",
                   );
                 }}
               >
