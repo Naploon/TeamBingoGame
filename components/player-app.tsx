@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 
@@ -488,6 +488,9 @@ export function PlayerApp({
   const [birthdayMode, setBirthdayMode] = useState(false);
   const [birthdayModeReady, setBirthdayModeReady] = useState(false);
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+  const eventSessionRef = useRef(
+    `${initialState.event.status}:${initialState.event.startedAt ?? "none"}:${initialState.event.endedAt ?? "none"}`,
+  );
 
   const availableViews = getAvailableViews(state);
   const selectedTask = state.board.find((card) => card.taskId === selectedTaskId) ?? null;
@@ -691,6 +694,24 @@ export function PlayerApp({
 
     setTaskSheetMode("details");
   }, [selectedTaskId, activeChallenge?.id, activeChallenge?.status, activeChallenge?.taskId, activeChallenge?.canRateByMe]);
+
+  useEffect(() => {
+    const nextEventSession = `${state.event.status}:${state.event.startedAt ?? "none"}:${state.event.endedAt ?? "none"}`;
+
+    if (eventSessionRef.current === nextEventSession) {
+      return;
+    }
+
+    eventSessionRef.current = nextEventSession;
+    setSelectedTaskId(null);
+    setTaskSheetMode("details");
+    setOpponentTeamId("");
+    setNote("");
+    setRatingStars(0);
+    setView(getDefaultView(state));
+    setMessage(null);
+    setError(null);
+  }, [state]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1743,6 +1764,10 @@ export function PlayerApp({
                         : activeChallenge.canRateByMe
                           ? "Move to the rating step to finish the flow."
                           : "This task is waiting on the other team."
+                      : teamNeedsName
+                        ? state.me.isCaptain
+                          ? "Choose and lock your team name before starting tasks."
+                          : "Your captain needs to choose and lock your team name before tasks can begin."
                       : selectedTask.canChallenge
                         ? "Compare the opponent cards and start the next challenge."
                         : "This task is view-only right now."}
