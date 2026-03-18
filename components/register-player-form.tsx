@@ -36,7 +36,7 @@ export function RegisterPlayerForm({
       const payload = await response.json();
 
       if (!response.ok) {
-        throw new Error(payload.error ?? "Could not register.");
+        throw new Error(payload.error ?? "Could not finish registration.");
       }
 
       router.push(payload.redirectTo);
@@ -51,11 +51,11 @@ export function RegisterPlayerForm({
   return (
     <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
       <label className="block space-y-2 text-sm font-medium text-ink">
-        <span>Display name</span>
+        <span>Player name</span>
         <Input
           value={displayName}
           onChange={(event) => setDisplayName(event.target.value)}
-          placeholder="How should the teams know you?"
+          placeholder="What should the other teams call you?"
           required
           disabled={disabled}
         />

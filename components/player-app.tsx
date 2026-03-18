@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { MarkdownContent } from "@/components/markdown-content";
 import { PlayerSignOutButton } from "@/components/player-sign-out-button";
@@ -486,6 +487,7 @@ export function PlayerApp({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [birthdayMode, setBirthdayMode] = useState(false);
   const [birthdayModeReady, setBirthdayModeReady] = useState(false);
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
 
   const availableViews = getAvailableViews(state);
   const selectedTask = state.board.find((card) => card.taskId === selectedTaskId) ?? null;
@@ -697,6 +699,7 @@ export function PlayerApp({
 
     setBirthdayMode(window.localStorage.getItem(birthdayModeStorageKey) === "on");
     setBirthdayModeReady(true);
+    setPortalRoot(document.body);
   }, [birthdayModeStorageKey]);
 
   useEffect(() => {
@@ -1460,27 +1463,28 @@ export function PlayerApp({
         </>
       )}
 
-      {selectedTask ? (
-        <div
-          className={cn(
-            "fixed inset-0 z-40 overflow-hidden bg-ink/45 p-2 sm:flex sm:items-center sm:justify-center sm:p-6",
-            birthdayMode ? "bg-fuchsia-950/35" : "",
-          )}
-        >
-          <div
-            className={cn(
-              "flex h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-[1.75rem] bg-mist shadow-panel sm:max-h-[92vh] sm:max-w-3xl sm:rounded-[2rem]",
-              birthdayMode
-                ? "border border-fuchsia-200/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(253,242,248,0.96),rgba(254,249,195,0.88),rgba(224,231,255,0.9))] shadow-[0_24px_70px_rgba(236,72,153,0.25)]"
-                : "",
-            )}
-          >
+      {selectedTask && portalRoot
+        ? createPortal(
             <div
               className={cn(
-                "sticky top-0 z-10 border-b border-ink/5 bg-mist px-4 pb-4 pt-[max(env(safe-area-inset-top),1rem)] sm:px-6 sm:pt-6",
-                birthdayMode ? "bg-white/70 backdrop-blur" : "",
+                "fixed inset-0 z-40 overflow-hidden bg-ink/45 p-2 sm:flex sm:items-center sm:justify-center sm:p-6",
+                birthdayMode ? "bg-fuchsia-950/35" : "",
               )}
             >
+              <div
+                className={cn(
+                  "flex h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-[1.75rem] bg-mist shadow-panel sm:max-h-[92vh] sm:max-w-3xl sm:rounded-[2rem]",
+                  birthdayMode
+                    ? "border border-fuchsia-200/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(253,242,248,0.96),rgba(254,249,195,0.88),rgba(224,231,255,0.9))] shadow-[0_24px_70px_rgba(236,72,153,0.25)]"
+                    : "",
+                )}
+              >
+                <div
+                  className={cn(
+                    "sticky top-0 z-10 border-b border-ink/5 bg-mist px-4 pb-4 pt-[max(env(safe-area-inset-top),1rem)] sm:px-6 sm:pt-6",
+                    birthdayMode ? "bg-white/70 backdrop-blur" : "",
+                  )}
+                >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <Badge tone={selectedTask.type === "competitive" ? "accent" : "success"}>
@@ -1724,12 +1728,12 @@ export function PlayerApp({
               </div>
             </div>
 
-            <div
-              className={cn(
-                "sticky bottom-0 border-t border-ink/5 bg-mist/95 px-4 py-4 backdrop-blur sm:px-6",
-                birthdayMode ? "bg-white/70" : "",
-              )}
-            >
+                <div
+                  className={cn(
+                    "sticky bottom-0 border-t border-ink/5 bg-mist/95 px-4 py-4 backdrop-blur sm:px-6",
+                    birthdayMode ? "bg-white/70" : "",
+                  )}
+                >
               {taskSheetMode === "details" ? (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-ink/60">
@@ -1780,26 +1784,29 @@ export function PlayerApp({
                   Choose the final result above, and add a note if you want more context in history.
                 </p>
               )}
-            </div>
-          </div>
-        </div>
-      ) : null}
+                </div>
+              </div>
+            </div>,
+            portalRoot,
+          )
+        : null}
 
-      {showInitialTeamSetup && state.team ? (
-        <div
-          className={cn(
-            "fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-ink/55 p-4 sm:p-6",
-            birthdayMode ? "bg-fuchsia-950/35" : "",
-          )}
-        >
-          <div
-            className={cn(
-              "max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-[2rem] bg-mist p-5 shadow-panel sm:max-h-[calc(100dvh-3rem)] sm:p-6",
-              birthdayMode
-                ? "border border-fuchsia-200/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(253,242,248,0.96),rgba(254,249,195,0.88),rgba(224,231,255,0.9))] shadow-[0_24px_70px_rgba(236,72,153,0.25)]"
-                : "",
-            )}
-          >
+      {showInitialTeamSetup && state.team && portalRoot
+        ? createPortal(
+            <div
+              className={cn(
+                "fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-ink/55 p-4 sm:p-6",
+                birthdayMode ? "bg-fuchsia-950/35" : "",
+              )}
+            >
+              <div
+                className={cn(
+                  "max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-[2rem] bg-mist p-5 shadow-panel sm:max-h-[calc(100dvh-3rem)] sm:p-6",
+                  birthdayMode
+                    ? "border border-fuchsia-200/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(253,242,248,0.96),rgba(254,249,195,0.88),rgba(224,231,255,0.9))] shadow-[0_24px_70px_rgba(236,72,153,0.25)]"
+                    : "",
+                )}
+              >
             <Badge tone="accent">Team setup</Badge>
             <div className="mt-4">
               <SectionHeading
@@ -1843,9 +1850,11 @@ export function PlayerApp({
                 Waiting for your captain to choose the final team name.
               </p>
             )}
-          </div>
-        </div>
-      ) : null}
+              </div>
+            </div>,
+            portalRoot,
+          )
+        : null}
     </div>
   );
 }

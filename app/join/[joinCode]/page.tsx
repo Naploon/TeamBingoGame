@@ -38,12 +38,12 @@ export default async function JoinEventPage({
           <div className="mt-4">
             <SectionHeading
               eyebrow="Join event"
-              title={`We couldn't find ${joinCode}`}
-              description="Check the code with the organizer and try again. If the game was just created, make sure you received the latest join code."
+              title={`We couldn't spot ${joinCode}`}
+              description="Double-check the code with the organizer and try again. If the game was just created, ask for the freshest version."
             />
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-ink/70">
-            <span>Tried code</span>
+            <span>Proovisid koodi</span>
             <JoinCodeBadge code={joinCode} />
           </div>
           <div className="mt-6 rounded-[1.75rem] bg-ink/5 p-4">
@@ -86,16 +86,16 @@ export default async function JoinEventPage({
             description={
               playerUser
                 ? event.status === "registration_open"
-                  ? "You are signed in. Finish this event registration with the display name other teams will see."
-                  : "Registration is closed. If this account joined earlier, you would be sent straight back into the event."
+                  ? "You are signed in. Now choose the name the other teams will see when you appear in the game."
+                  : "Registration is closed. If this account joined earlier, we would whisk you straight back into the event."
                 : event.status === "registration_open"
-                  ? "Create a player account or sign in with email and password. Once you're back, the same account restores your event state."
-                  : "Registration is closed. Sign in with the player account you used earlier to resume this event."
+                  ? "Create a player account or sign in. When you come back later, the same account will remember your place in the game."
+                  : "Registration is closed. Sign in with the same player account you used earlier and the game will welcome you back."
             }
           />
         </div>
         <div className="mt-6 rounded-[1.75rem] bg-sea/8 p-4 text-sm leading-6 text-ink/70">
-          One player account keeps your join state, team, and match history together. If you leave the app and return later, signing back into the same account brings you back to this event.
+          One player account keeps your join state, team, and match history bundled together. Wander off and come back later, and the same account will lead you neatly back into the adventure.
         </div>
         {playerUser ? (
           <>
@@ -107,7 +107,7 @@ export default async function JoinEventPage({
               <RegisterPlayerForm joinCode={event.joinCode} disabled={false} />
             ) : (
               <p className="mt-6 rounded-[1.6rem] bg-coral/10 px-4 py-3 text-sm text-coral">
-                This account is not registered for the event. Ask the organizer to reopen registration or sign in with the account that joined earlier.
+                This account is not linked to the event. Ask the organizer to reopen registration, or sign in with the account that joined earlier.
               </p>
             )}
             <div className="mt-4">

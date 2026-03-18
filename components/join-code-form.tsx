@@ -7,7 +7,7 @@ import { Button, Input } from "@/components/ui";
 
 export function JoinCodeForm({
   initialJoinCode = "",
-  submitLabel = "Join Event",
+  submitLabel = "Join event",
 }: {
   initialJoinCode?: string;
   submitLabel?: string;

@@ -644,7 +644,7 @@ export function AdminDashboard({
                   value={templateQuery}
                   onChange={(event) => setTemplateQuery(event.target.value)}
                 />
-                <div className="mt-4 space-y-3">
+                <div className="mt-4 max-h-[30rem] space-y-3 overflow-y-auto pr-2">
                   {filteredTemplates.length === 0 ? (
                     <p className="rounded-2xl bg-white/80 px-4 py-3 text-sm text-ink/60">
                       No templates match your search yet.

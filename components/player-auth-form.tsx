@@ -58,13 +58,13 @@ export function PlayerAuthForm({
       const payload = await response.json();
 
       if (!response.ok) {
-        throw new Error(payload.error ?? "Could not create account.");
+        throw new Error(payload.error ?? "Could not create your account.");
       }
 
       setMode("sign_in");
       setMessage(
         payload.message ??
-          "Account created. Email confirmation is skipped for now, so you can sign in right away.",
+          "Your account is ready. No email confirmation dance right now, so you can sign in straight away.",
       );
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Authentication failed.");
@@ -106,7 +106,7 @@ export function PlayerAuthForm({
         </div>
       ) : null}
       <p className="text-sm leading-6 text-ink/65">
-        Use the same email account each time so the app can restore your player state and bring you back to the same event.
+        Use the same email each time so the app can find your team, your progress, and your place in the game like an old friend.
       </p>
       <form className="space-y-4" onSubmit={handleSubmit}>
         <label className="block space-y-2 text-sm font-medium text-ink">
