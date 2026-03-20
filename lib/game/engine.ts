@@ -30,6 +30,47 @@ function shuffle<T>(items: T[], seed: number) {
   return result;
 }
 
+function getChallengeMoment(challenge: Pick<ChallengeEngineInput, "createdAt" | "resolvedAt">) {
+  return new Date(challenge.resolvedAt ?? challenge.createdAt).getTime();
+}
+
+function isSameMatchup(
+  challenge: Pick<ChallengeEngineInput, "challengerTeamId" | "opponentTeamId">,
+  teamAId: string,
+  teamBId: string,
+) {
+  return (
+    (challenge.challengerTeamId === teamAId && challenge.opponentTeamId === teamBId) ||
+    (challenge.challengerTeamId === teamBId && challenge.opponentTeamId === teamAId)
+  );
+}
+
+function getLatestClosedChallengeForTeam(challenges: ChallengeEngineInput[], teamId: string) {
+  return (
+    challenges
+      .filter(
+        (challenge) =>
+          challenge.status !== "open" &&
+          (challenge.challengerTeamId === teamId || challenge.opponentTeamId === teamId),
+      )
+      .sort((left, right) => getChallengeMoment(right) - getChallengeMoment(left))[0] ?? null
+  );
+}
+
+export function isImmediateRematchBlocked(
+  challenges: ChallengeEngineInput[],
+  challengerTeamId: string,
+  opponentTeamId: string,
+) {
+  const latestForChallenger = getLatestClosedChallengeForTeam(challenges, challengerTeamId);
+  if (latestForChallenger && isSameMatchup(latestForChallenger, challengerTeamId, opponentTeamId)) {
+    return true;
+  }
+
+  const latestForOpponent = getLatestClosedChallengeForTeam(challenges, opponentTeamId);
+  return Boolean(latestForOpponent && isSameMatchup(latestForOpponent, challengerTeamId, opponentTeamId));
+}
+
 function tierFromWins(winCount: number): CompletionTier {
   if (winCount >= 3) {
     return "platinum";

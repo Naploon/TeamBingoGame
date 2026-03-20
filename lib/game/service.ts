@@ -25,6 +25,7 @@ import {
   buildLeaderboard,
   generateBoardAssignments,
   generateTeamPlan,
+  isImmediateRematchBlocked,
   recomputeTeamTaskStates,
 } from "@/lib/game/engine";
 import { buildPlayerRecaps } from "@/lib/game/insights";
@@ -227,6 +228,7 @@ function getOpponentUnavailableReason(input: {
   myCompletionTier: string;
   opponentCompletionTier: string;
   isBlockedAfterLoss: boolean;
+  isBlockedByRecentMatchup: boolean;
 }) {
   if (!input.myTeamHasLockedName) {
     return "Lock in your team name before starting tasks.";
@@ -250,6 +252,10 @@ function getOpponentUnavailableReason(input: {
 
   if (input.isBlockedAfterLoss) {
     return "Challenge a different team before rematching here.";
+  }
+
+  if (input.isBlockedByRecentMatchup) {
+    return "Face a different team before playing this matchup again.";
   }
 
   return null;
@@ -814,6 +820,13 @@ export async function getPlayerState(slug: string, authUserId: string) {
           : null,
       }
     : null;
+  const recentMatchupBlockedByTeamId = myTeamId
+    ? new Map(
+        eventTeams
+          .filter((team) => team.id !== myTeamId)
+          .map((team) => [team.id, isImmediateRematchBlocked(eventChallenges, myTeamId, team.id)]),
+      )
+    : new Map<string, boolean>();
 
   const taskById = new Map(eventTasks.map((task) => [task.id, task]));
   if (activeChallengeView) {
@@ -893,6 +906,7 @@ export async function getPlayerState(slug: string, authUserId: string) {
           const completionTier = opponentState?.completionTier ?? "none";
           const isNameLocked = Boolean(team.name);
           const isBlockedAfterLoss = state.lastLossOpponentTeamId === team.id;
+          const isBlockedByRecentMatchup = recentMatchupBlockedByTeamId.get(team.id) ?? false;
           const reason = getOpponentUnavailableReason({
             myTeamHasLockedName: Boolean(myTeam?.name),
             teamHasLockedName: isNameLocked,
@@ -900,6 +914,7 @@ export async function getPlayerState(slug: string, authUserId: string) {
             myCompletionTier: state.completionTier,
             opponentCompletionTier: completionTier,
             isBlockedAfterLoss,
+            isBlockedByRecentMatchup,
           });
 
           return {
@@ -1121,6 +1136,10 @@ export async function createChallenge(slug: string, authUserId: string, input: u
 
   if (blockedOpenChallenge) {
     throw new AppError("One of these teams is already in an active challenge.");
+  }
+
+  if (isImmediateRematchBlocked(openChallenges, context.player.teamId, parsed.opponentTeamId)) {
+    throw new AppError("These teams need a different opponent before they can face each other again.");
   }
 
   if (task.type === "cooperative") {

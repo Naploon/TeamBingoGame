@@ -1619,13 +1619,20 @@ export function PlayerApp({
                         <button
                           key={team.teamId}
                           type="button"
+                          disabled={!team.canChallenge}
                           className={cn(
                             "w-full rounded-3xl border px-4 py-4 text-left transition",
-                            opponentTeamId === team.teamId
+                            !team.canChallenge
+                              ? "cursor-not-allowed border-ink/10 bg-ink/5"
+                              : opponentTeamId === team.teamId
                               ? "border-sea bg-sea/8"
                               : "border-ink/10 bg-white hover:bg-ink/5",
                           )}
-                          onClick={() => setOpponentTeamId(team.teamId)}
+                          onClick={() => {
+                            if (team.canChallenge) {
+                              setOpponentTeamId(team.teamId);
+                            }
+                          }}
                         >
                           <div className="flex items-start justify-between gap-4">
                             <div>

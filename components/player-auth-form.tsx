@@ -18,6 +18,7 @@ export function PlayerAuthForm({
   const [mode, setMode] = useState<AuthMode>("sign_in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,6 +46,10 @@ export function PlayerAuthForm({
         return;
       }
 
+      if (password !== confirmPassword) {
+        throw new Error("Passwords do not match.");
+      }
+
       const response = await fetch(`/api/join/${joinCode}/auth/signup`, {
         method: "POST",
         headers: {
@@ -62,6 +67,7 @@ export function PlayerAuthForm({
       }
 
       setMode("sign_in");
+      setConfirmPassword("");
       setMessage(
         payload.message ??
           "Your account is ready. No email confirmation dance right now, so you can sign in straight away.",
@@ -84,6 +90,7 @@ export function PlayerAuthForm({
             }`}
             onClick={() => {
               setMode("sign_in");
+              setConfirmPassword("");
               setMessage(null);
               setError(null);
             }}
@@ -97,6 +104,7 @@ export function PlayerAuthForm({
             }`}
             onClick={() => {
               setMode("sign_up");
+              setConfirmPassword("");
               setMessage(null);
               setError(null);
             }}
@@ -132,6 +140,20 @@ export function PlayerAuthForm({
             required
           />
         </label>
+        {mode === "sign_up" ? (
+          <label className="block space-y-2 text-sm font-medium text-ink">
+            <span>Confirm password</span>
+            <Input
+              type="password"
+              autoComplete="new-password"
+              minLength={8}
+              placeholder="Type the same password again"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              required
+            />
+          </label>
+        ) : null}
         {message ? <p className="text-sm text-sea">{message}</p> : null}
         {error ? <p className="text-sm text-coral">{error}</p> : null}
         <Button type="submit" disabled={isSubmitting}>

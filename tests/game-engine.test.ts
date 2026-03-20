@@ -2,6 +2,7 @@ import {
   buildLeaderboard,
   generateBoardAssignments,
   generateTeamPlan,
+  isImmediateRematchBlocked,
   recomputeTeamTaskStates,
 } from "@/lib/game/engine";
 
@@ -336,5 +337,61 @@ describe("game engine", () => {
 
     expect(teamA.winCount).toBe(3);
     expect(teamA.completionTier).toBe("platinum");
+  });
+
+  it("blocks immediate rematches until both teams have faced someone else", () => {
+    const challenges = [
+      {
+        id: "challenge-1",
+        taskId: "task-1",
+        challengerTeamId: "team-a",
+        opponentTeamId: "team-b",
+        type: "competitive" as const,
+        status: "resolved" as const,
+        winnerTeamId: "team-a",
+        createdAt: "2026-03-20T10:00:00.000Z",
+      },
+      {
+        id: "challenge-2",
+        taskId: "task-2",
+        challengerTeamId: "team-a",
+        opponentTeamId: "team-c",
+        type: "competitive" as const,
+        status: "resolved" as const,
+        winnerTeamId: "team-c",
+        createdAt: "2026-03-20T10:05:00.000Z",
+      },
+      {
+        id: "challenge-3",
+        taskId: "task-3",
+        challengerTeamId: "team-b",
+        opponentTeamId: "team-d",
+        type: "cooperative" as const,
+        status: "resolved" as const,
+        winnerTeamId: null,
+        createdAt: "2026-03-20T10:10:00.000Z",
+      },
+    ];
+
+    expect(isImmediateRematchBlocked(challenges.slice(0, 1), "team-a", "team-b")).toBe(true);
+    expect(isImmediateRematchBlocked(challenges.slice(0, 2), "team-a", "team-b")).toBe(true);
+    expect(isImmediateRematchBlocked(challenges, "team-a", "team-b")).toBe(false);
+  });
+
+  it("treats cancelled or cooperative results as rematch blockers too", () => {
+    const challenges = [
+      {
+        id: "challenge-1",
+        taskId: "task-1",
+        challengerTeamId: "team-a",
+        opponentTeamId: "team-b",
+        type: "cooperative" as const,
+        status: "cancelled" as const,
+        winnerTeamId: null,
+        createdAt: "2026-03-20T11:00:00.000Z",
+      },
+    ];
+
+    expect(isImmediateRematchBlocked(challenges, "team-a", "team-b")).toBe(true);
   });
 });
