@@ -481,6 +481,7 @@ export function PlayerApp({
   const [note, setNote] = useState("");
   const [ratingStars, setRatingStars] = useState(0);
   const [teamName, setTeamName] = useState(initialState.team?.name ?? initialState.team?.autoName ?? "");
+  const serverTeamNameRef = useRef(initialState.team?.name ?? initialState.team?.autoName ?? "");
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -551,10 +552,14 @@ export function PlayerApp({
   }
 
   function applyState(payload: PlayerState) {
-    setState(payload);
-    if (payload.team) {
-      setTeamName(payload.team.name ?? payload.team.autoName);
+    const nextServerTeamName = payload.team?.name ?? payload.team?.autoName ?? "";
+
+    if (nextServerTeamName !== serverTeamNameRef.current) {
+      serverTeamNameRef.current = nextServerTeamName;
+      setTeamName(nextServerTeamName);
     }
+
+    setState(payload);
   }
 
   async function refreshNow() {

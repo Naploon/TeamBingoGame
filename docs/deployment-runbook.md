@@ -6,6 +6,7 @@
 - Production URL: `https://karlisynnam2ng.vercel.app`
 - Legacy alias still present: `https://team-bingo-game.vercel.app`
 - Local runtime target: Node 20
+- Vercel Authentication should stay on preview-only protection so the clean production URL remains public
 
 ## Files that matter
 - [`vercel.json`](../vercel.json): forces Vercel to treat this as a Next.js app
@@ -31,8 +32,8 @@
 - `DATABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
 - `SESSION_SECRET`
-- `ADMIN_ALLOWLIST`
 - `NEXT_PUBLIC_APP_URL`
 
 ## Environment variables expected locally
@@ -47,6 +48,7 @@
 - If the legacy alias remains active, also keep:
   - `https://team-bingo-game.vercel.app/**`
 - For production, prefer Transaction Pooler URI over direct Postgres URI
+- Admin access is controlled by the `admin_users` table plus Supabase Auth password login, not by `ADMIN_ALLOWLIST`
 
 ## Known gotchas
 - Without `vercel.json`, Vercel may mis-detect the project and fail looking for a static output directory.
@@ -54,6 +56,8 @@
 - Vercel preview env management can ask for a branch target if you add preview vars by CLI.
 - New shells use Node 20, but old shells may still have stale Node 18 PATH state.
 - After the Vercel project rename, the clean alias `karlisynnam2ng.vercel.app` was created manually and may need to be re-pointed after some production deploys.
+- If Vercel Authentication is changed away from preview-only, `karlisynnam2ng.vercel.app` can start returning a protection page even while the legacy alias stays public.
+- Missing `SUPABASE_SERVICE_ROLE_KEY` in Vercel breaks server-confirmed player signup and task image uploads.
 - `vercel project inspect` may show generic framework settings, but `vercel.json` still drives correct Next.js deployment behavior.
 
 ## Minimal incident triage
@@ -64,6 +68,8 @@
 - Auth fails:
   - check Supabase Site URL and redirect URLs
   - confirm `NEXT_PUBLIC_APP_URL` matches production alias/domain
+  - confirm `SUPABASE_SERVICE_ROLE_KEY` still exists in Vercel
+  - confirm admin emails exist in `admin_users` if the failure is admin-only
 - Clean alias points to the wrong deployment:
   - run `vercel alias list`
   - point `karlisynnam2ng.vercel.app` at the latest ready production deployment

@@ -4,13 +4,14 @@ Mobile-first team bingo challenge app built with Next.js, Tailwind, Drizzle ORM,
 
 ## What is implemented
 
-- Player join flow with email auth, join code entry, and player cookie sessions
-- Admin login with Supabase-backed auth
+- Player join flow with email auth, join code entry, and password-confirmed account creation
+- Admin login with database-backed admin allowlisting plus Supabase password auth
 - Random team generation, random captain selection, and per-team shuffled 4x4 boards
 - Locked team naming flow before a team can start tasks or be challenged
 - Live player app with board, match history, leaderboard, and team views
 - Competitive and cooperative task flows, including cooperative failure tracking
 - Replay-based progression with base, gold, and diamond task ranks
+- Immediate rematch protection so the same two teams cannot face each other again until both have played another team
 - Half-star task ratings from both teams after a challenge resolves
 - Admin dashboard for event setup, task management, restart/end controls, captain switching, challenge overrides, and live results
 - Global task template library plus task images stored in Supabase Storage
@@ -30,7 +31,7 @@ Mobile-first team bingo challenge app built with Next.js, Tailwind, Drizzle ORM,
 
 1. Use Node 20.x. The repo pins this in `.nvmrc` and `package.json`.
 2. Copy `.env.example` to `.env.local`.
-3. Fill in Supabase URL, publishable key, service role key, database URL, app URL, session secret, and admin allowlist.
+3. Fill in Supabase URL, publishable key, service role key, database URL, app URL, and session secret.
 4. Install dependencies:
 
 ```bash
@@ -43,13 +44,14 @@ npm install
 npm run db:push
 ```
 
-6. Start the app:
+6. If you need local admin access, insert the admin email into `admin_users` and make sure the same email also exists in Supabase Auth with a password.
+7. Start the app:
 
 ```bash
 npm run dev
 ```
 
-7. Open [http://localhost:3000](http://localhost:3000).
+8. Open [http://localhost:3000](http://localhost:3000).
 
 ## Local dev commands
 
@@ -84,6 +86,7 @@ npm run dev:reset
 - Teams without a locked name do not appear as challenge targets.
 - Competitive tasks can be replayed until a team reaches diamond on that task.
 - Cooperative tasks can also be replayed to reach higher ranks.
+- The same two teams cannot immediately rematch; both teams must face someone else before they can play each other again.
 - Cooperative failure is tracked as a failed attempt, not as a cancellation.
 - Cancelled challenges are treated as true cancellations and should not affect progression.
 
@@ -93,7 +96,7 @@ npm run dev:reset
 - Add your local and production callback URLs:
   - `http://localhost:3000/auth/callback`
   - `https://karlisynnam2ng.vercel.app/auth/callback`
-- Set `ADMIN_ALLOWLIST` to the organizer emails that should be allowed to access the admin area.
+- Admin access is controlled by the `admin_users` table. Each admin email must exist there and also exist in Supabase Auth with a password.
 - Keep `SUPABASE_SERVICE_ROLE_KEY` available locally and in Vercel because image uploads and server-confirmed player signup use it.
 - If you keep the legacy alias active, also keep `https://team-bingo-game.vercel.app/**` in Supabase Auth redirect URLs during the transition.
 
@@ -103,10 +106,11 @@ npm run dev:reset
 
 1. This repo is already connected to the Vercel project `karlisynnam2ng`.
 2. Vercel will pick up Node 20 from `package.json`.
-3. Add all environment variables from `.env.example`.
+3. Add all required runtime environment variables, including `SUPABASE_SERVICE_ROLE_KEY` in Production.
 4. Set the production URL in `NEXT_PUBLIC_APP_URL`.
 5. Deploy `main` to production and use preview deployments for staging checks.
-6. If `karlisynnam2ng.vercel.app` does not move automatically to the latest production deployment, re-point it manually:
+6. Keep Vercel Authentication on preview-only protection so `karlisynnam2ng.vercel.app` stays public.
+7. If `karlisynnam2ng.vercel.app` does not move automatically to the latest production deployment, re-point it manually:
 
 ```bash
 npx vercel alias set <deployment-url> karlisynnam2ng.vercel.app --scope karl7899-7240s-projects
@@ -116,7 +120,7 @@ npx vercel alias set <deployment-url> karlisynnam2ng.vercel.app --scope karl7899
 
 1. Copy the Postgres connection string into `DATABASE_URL`.
 2. Run `npm run db:push` against the intended project/environment.
-3. Seed organizer emails in `ADMIN_ALLOWLIST`.
+3. Seed admin emails in `admin_users` and create matching Supabase Auth users with passwords.
 4. For production, prefer the Supabase Transaction Pooler connection string.
 5. Keep the primary production hostname aligned with `https://karlisynnam2ng.vercel.app`.
 6. If you leave the old alias active, keep `https://team-bingo-game.vercel.app/**` in Supabase Auth redirects until you retire it.
@@ -144,21 +148,21 @@ Use this before pushing a production change.
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `SESSION_SECRET`
-   - `ADMIN_ALLOWLIST`
    - `NEXT_PUBLIC_APP_URL`
 7. Check that Supabase Auth is still configured with:
    - Site URL `https://karlisynnam2ng.vercel.app`
    - Redirect URLs for `https://karlisynnam2ng.vercel.app/**` and `http://localhost:3000/**`
    - If the legacy alias is still in use, also keep `https://team-bingo-game.vercel.app/**`
-8. Push to `main` and wait for the Vercel production deployment to finish.
-9. Smoke-test production:
+8. Check that intended admin emails exist in `admin_users` and as Supabase Auth users with passwords.
+9. Push to `main` and wait for the Vercel production deployment to finish.
+10. Smoke-test production:
    - `https://karlisynnam2ng.vercel.app` loads
    - `/admin/login` loads
    - one admin login works
    - one player can join an event
    - one player can open the game board
    - one task image loads if image-related code changed
-10. If the clean alias is still on an older deployment, re-point it:
+11. If the clean alias is still on an older deployment, re-point it:
 
 ```bash
 npx vercel alias set <deployment-url> karlisynnam2ng.vercel.app --scope karl7899-7240s-projects
